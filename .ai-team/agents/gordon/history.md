@@ -28,3 +28,10 @@
 📌 Team update (2026-02-11): Snake_case PostgreSQL table names with PascalCase C# entities — decided by Lucius
 📌 Team update (2026-02-11): RCON password as Aspire secret parameter via builder.AddParameter("rcon-password", secret: true) — decided by Lucius
 📌 Team update (2026-02-11): EF Core enum-to-string conversion for GenerationJobStatus — decided by Lucius
+📌 Team update (2026-02-11): Discord event DTO — unified DiscordChannelEvent record in Bridge.Data/Events/ — decided by Oracle
+📌 Team update (2026-02-11): Bridge API endpoints + nullable coordinate schema — decided by Lucius
+📌 Team update (2026-02-11): Event consumer architecture — BackgroundService + job envelope + upsert pattern — decided by Lucius
+📌 Team update (2026-02-11): Village generation — singleton RconService with semaphore + rate limiting — decided by Batgirl
+📌 Team update (2026-02-11): Building generation — 21×21, 4-floor, ring placement, wall signs — decided by Batgirl
+📌 Team update (2026-02-11): Job processor — polls queue:worldgen, 3 retries with exponential backoff — decided by Lucius
+📌 Team update (2026-02-11): Integration test infra — WebApplicationFactory + Testcontainers Redis + SQLite, nullable Max() fix — decided by Nightwing

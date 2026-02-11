@@ -17,6 +17,10 @@ When building a Discord bot as part of a larger .NET service architecture (Aspir
 - Register slash commands in the `client.Ready` event (gateway is fully connected at that point)
 - Handle slash commands via `client.SlashCommandExecuted` event
 - Bot token from `IConfiguration["Discord:BotToken"]` — works with user secrets and env vars
+- Wire channel events via `client.ChannelCreated`, `client.ChannelDestroyed`, `client.ChannelUpdated` — detect category vs text channel with `is ICategoryChannel`
+- Inject `IConnectionMultiplexer` (from Aspire's `AddRedisClient`) to get `ISubscriber` for Redis pub/sub
+- Use `RedisChannel.Literal(channelName)` for publish — avoid pattern-matching overhead
+- Filter `ChannelUpdated` events to only publish when meaningful properties change (name, position) — Discord fires this event for many property changes
 
 ## Examples
 ```csharp

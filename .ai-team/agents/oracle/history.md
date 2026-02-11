@@ -9,6 +9,13 @@
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+- **S2-01 Discord event handlers implemented.** Three handlers wired: `ChannelCreated`, `ChannelDestroyed`, `ChannelUpdated`. Each detects category vs text channel via `ICategoryChannel` pattern match and publishes a `DiscordChannelEvent` DTO to Redis `events:discord:channel`.
+- **Shared event DTOs in `Bridge.Data/Events/`.** `DiscordChannelEvent` is a unified record covering all 5 event types (ChannelGroupCreated, ChannelGroupDeleted, ChannelCreated, ChannelDeleted, ChannelUpdated). Uses `System.Text.Json` with `JsonSerializerDefaults.Web` (camelCase) and `JsonStringEnumConverter` for the enum.
+- **Redis pub/sub via `IConnectionMultiplexer`** — injected into `DiscordBotWorker` from Aspire's `AddRedisClient("redis")`. Get `ISubscriber` once at startup, then use `PublishAsync(RedisChannel.Literal(...), json)` for each event.
+- **`RedisChannels` constants class** in `Bridge.Data/Events/` — single source of truth for pub/sub channel names shared between producer (Oracle) and consumer (Lucius).
+- **`GatewayIntents.Guilds`** is sufficient for channel create/destroy/update events — no additional intents needed for S2-01.
+- **ChannelUpdated filtering** — Discord fires `ChannelUpdated` for many property changes (permissions, topic, etc.). We only publish when `Name` or `Position` actually changed to reduce noise for the consumer.
+
 📌 Team update (2026-02-11): System architecture established — 3 .NET services (Discord Bot, Bridge API, WorldGen Worker) + Paper MC + PostgreSQL + Redis, orchestrated by Aspire 13.1 — decided by Gordon
 📌 Team update (2026-02-11): Paper MC chosen as Minecraft server platform (itzg/minecraft-server Docker container, orchestrated by Aspire) — decided by Gordon
 📌 Team update (2026-02-11): Sprint plan defined — 3 sprints: Foundation, Core Features, Integration & Navigation — decided by Gordon
@@ -34,3 +41,7 @@
 📌 Team update (2026-02-11): RCON password as Aspire secret parameter via builder.AddParameter("rcon-password", secret: true) — decided by Lucius
 📌 Team update (2026-02-11): EF Core enum-to-string conversion for GenerationJobStatus — decided by Lucius
 📌 Team update (2026-02-11): Discord bot token as Aspire secret parameter — passed via env var Discord__BotToken, reads as Discord:BotToken in .NET config — decided by Lucius
+📌 Team update (2026-02-11): Sprint 2 interface contracts established — Redis event schema, job queue format, API endpoints, WorldGen interfaces, shared constants — decided by Gordon
+📌 Team update (2026-02-11): Bridge API endpoints + nullable coordinate columns (VillageX/Z, BuildingX/Z) — sync endpoint available for bot Ready event — decided by Lucius
+📌 Team update (2026-02-11): Event consumer uses DiscordChannelEvent.FromJson() from Bridge.Data.Events — ChannelUpdated filtered to name/position changes only — decided by Lucius
+📌 Team update (2026-02-11): DefaultIfEmpty(-1).MaxAsync() replaced with nullable Max() pattern in prod code for cross-provider compatibility — decided by Nightwing

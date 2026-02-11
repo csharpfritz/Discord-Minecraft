@@ -25,3 +25,14 @@
 📌 Team update (2026-02-11): Snake_case PostgreSQL table names with PascalCase C# entities — decided by Lucius
 📌 Team update (2026-02-11): RCON password as Aspire secret parameter via builder.AddParameter("rcon-password", secret: true) — decided by Lucius
 📌 Team update (2026-02-11): EF Core enum-to-string conversion for GenerationJobStatus — decided by Lucius
+- Integration tests for Bridge.Api use WebApplicationFactory + Testcontainers Redis + SQLite in-memory — pattern established in `BridgeApiFactory.cs`
+- Aspire's `AddNpgsqlDbContext` and `AddRedisClient` validate connection strings at registration time; tests must provide fake connection strings via `UseSetting()` before service registration runs
+- To swap Npgsql for SQLite, must remove ALL EF Core + Npgsql service descriptors (matching by FullName) before re-registering — partial removal causes "multiple database providers" error
+- SQLite in-memory with `Cache=Shared` requires a keep-alive `SqliteConnection` open for the entire fixture lifetime; without it, the shared DB is destroyed when the last connection closes
+- `DefaultIfEmpty(-1).MaxAsync()` doesn't translate in SQLite provider — fixed to use `Select(c => (int?)c.BuildingIndex).MaxAsync()` with nullable cast, which works on both Npgsql and SQLite
+- 20 integration tests covering: event consumer (pub/sub → DB + job queue), API endpoints (sync, villages, buildings, player link), and edge cases (duplicates, orphan channels, deletions, idempotent sync)
+
+📌 Team update (2026-02-11): Sprint 2 interface contracts established — Redis event schema, job queue format, API endpoints, WorldGen interfaces, shared constants — decided by Gordon
+📌 Team update (2026-02-11): Discord event DTO — unified DiscordChannelEvent record in Bridge.Data/Events/ — decided by Oracle
+📌 Team update (2026-02-11): Bridge API endpoints + nullable coordinate columns + AddCoordinateColumns migration — decided by Lucius
+📌 Team update (2026-02-11): Event consumer uses IsArchived on ChannelGroup, auto-creates groups on out-of-order events — decided by Lucius
