@@ -14,3 +14,14 @@
 📌 Team update (2026-02-11): Sprint plan defined — 3 sprints: Foundation, Core Features, Integration & Navigation — decided by Gordon
 📌 Team update (2026-02-11): Channel deletion archives buildings (does not destroy them) — decided by Gordon
 📌 Team update (2026-02-11): Account linking via one-time 6-char codes with 5-min Redis TTL (no OAuth) — decided by Gordon
+- CI workflow lives at `.github/workflows/ci.yml` — triggers on push to main and PRs, runs restore → build → test on ubuntu-latest with .NET 10 SDK
+- Test projects go under `tests/` directory, organized in a `/tests/` solution folder in `DiscordMinecraft.slnx`
+- `tests/Bridge.Api.Tests/` is the xUnit test project for Bridge.Api — uses xunit 2.9.3, xunit.runner.visualstudio 3.1.4, Microsoft.NET.Test.Sdk 17.14.1, coverlet.collector 6.0.4
+- Solution file is `DiscordMinecraft.slnx` (XML-based `.slnx` format, not legacy `.sln`) — use `<Folder Name="/tests/">` structure for test projects
+- Global `<Using Include="Xunit" />` in the test csproj eliminates need for `using Xunit;` in test files
+- CI runs `dotnet restore/build/test` at repo root, which discovers the `.slnx` file automatically
+
+📌 Team update (2026-02-11): Discord bot uses singleton DiscordSocketClient with BackgroundService pattern — decided by Oracle
+📌 Team update (2026-02-11): Snake_case PostgreSQL table names with PascalCase C# entities — decided by Lucius
+📌 Team update (2026-02-11): RCON password as Aspire secret parameter via builder.AddParameter("rcon-password", secret: true) — decided by Lucius
+📌 Team update (2026-02-11): EF Core enum-to-string conversion for GenerationJobStatus — decided by Lucius

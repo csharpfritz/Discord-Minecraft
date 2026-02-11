@@ -22,3 +22,9 @@
 - `docs/sprints.md` — first 3 sprint plans with work item assignments
 - Jeff prefers .NET 10, Aspire 13.1, C# — no negotiation on stack choices.
 - Team roles: Oracle handles Discord+Minecraft protocol, Lucius handles .NET/Aspire/DB, Batgirl handles world gen algorithms, Nightwing handles tests.
+
+📌 Team update (2026-02-11): Discord bot uses singleton DiscordSocketClient with BackgroundService pattern — decided by Oracle
+📌 Team update (2026-02-11): Test projects under tests/{ProjectName}.Tests/, CI at .github/workflows/ci.yml with .NET 10 — decided by Nightwing
+📌 Team update (2026-02-11): Snake_case PostgreSQL table names with PascalCase C# entities — decided by Lucius
+📌 Team update (2026-02-11): RCON password as Aspire secret parameter via builder.AddParameter("rcon-password", secret: true) — decided by Lucius
+📌 Team update (2026-02-11): EF Core enum-to-string conversion for GenerationJobStatus — decided by Lucius
