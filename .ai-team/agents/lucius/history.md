@@ -38,3 +38,10 @@
 
 📌 Team update (2026-02-11): Discord bot uses singleton DiscordSocketClient with BackgroundService pattern — decided by Oracle
 📌 Team update (2026-02-11): Test projects under tests/{ProjectName}.Tests/, CI at .github/workflows/ci.yml with .NET 10 — decided by Nightwing
+
+### Discord Bot Token Configuration
+
+- Discord bot token follows the same Aspire secret parameter pattern as RCON password: `builder.AddParameter("discord-bot-token", secret: true)` in `AppHost.cs`
+- Token is passed to the discord-bot project via `.WithEnvironment("Discord__BotToken", discordBotToken)` — Aspire injects it as an environment variable
+- .NET configuration automatically maps `Discord__BotToken` (env var double-underscore) to `Discord:BotToken` (hierarchical config key) — no code changes needed in the consuming service
+- `DiscordBotWorker.cs` reads `configuration["Discord:BotToken"]` which works with both Aspire-injected env vars and local user secrets

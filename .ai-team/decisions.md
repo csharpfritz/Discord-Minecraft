@@ -51,3 +51,8 @@
 **By:** Lucius
 **What:** The `GenerationJobStatus` enum is stored as a string column in PostgreSQL (via `HasConversion<string>()`) rather than as an integer.
 **Why:** String storage makes the database human-readable when querying directly, and it's resilient to enum reordering. The performance difference is negligible for a job audit table.
+
+### 2026-02-11: Discord bot token as Aspire secret parameter
+**By:** Lucius
+**What:** Discord bot token is provisioned via `builder.AddParameter("discord-bot-token", secret: true)` in AppHost.cs and passed to the discord-bot project via `.WithEnvironment("Discord__BotToken", discordBotToken)`. The worker reads it from `configuration["Discord:BotToken"]` — .NET config maps double-underscore env vars to hierarchical keys automatically.
+**Why:** Follows the same pattern established for RCON password. Aspire secret parameters integrate with user secrets in dev and proper secret stores in production. The env var naming convention (`__` → `:`) is a built-in .NET feature, so no custom mapping code is needed. Keeps secrets out of source control and masked in the Aspire dashboard.
