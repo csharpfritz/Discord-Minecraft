@@ -42,10 +42,29 @@ public sealed class RconService : IAsyncDisposable
         if (addresses.Length == 0)
             throw new InvalidOperationException($"Could not resolve RCON host: {_host}");
 
-        _rcon = new RCON(addresses[0], _port, _password);
-        await _rcon.ConnectAsync();
-        _logger.LogInformation("Connected to RCON at {Host}:{Port}", _host, _port);
+        _logger.LogInformation("Connecting to RCON at {Host}:{Port} (resolved: {Address})", _host, _port, addresses[0]);
+        var rcon = new RCON(addresses[0], _port, _password);
+        await rcon.ConnectAsync();
+
+        // Verify the connection is alive with a lightweight command
+        var verify = await rcon.SendCommandAsync("seed");
+        _logger.LogInformation("RCON connected and verified at {Host}:{Port} — seed: {Seed}", _host, _port, verify);
+
+        _rcon = rcon;
         return _rcon;
+    }
+
+    private void SafeDisposeRcon()
+    {
+        try
+        {
+            _rcon?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Suppressed exception during RCON dispose");
+        }
+        _rcon = null;
     }
 
     public async Task<string> SendCommandAsync(string command, CancellationToken ct = default)
@@ -61,8 +80,7 @@ public sealed class RconService : IAsyncDisposable
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "RCON command failed, resetting connection: {Command}", command);
-            _rcon?.Dispose();
-            _rcon = null;
+            SafeDisposeRcon();
             throw;
         }
         finally
@@ -87,8 +105,7 @@ public sealed class RconService : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        _rcon?.Dispose();
-        _rcon = null;
+        SafeDisposeRcon();
         _semaphore.Dispose();
     }
 }
