@@ -18,8 +18,17 @@ public sealed class RconService : IAsyncDisposable
     public RconService(IConfiguration configuration, ILogger<RconService> logger)
     {
         _logger = logger;
-        _host = configuration["Rcon:Host"] ?? "localhost";
-        _port = ushort.Parse(configuration["Rcon:Port"] ?? "25575");
+        var rawHost = configuration["Rcon:Host"] ?? "localhost";
+        if (Uri.TryCreate(rawHost, UriKind.Absolute, out var uri))
+        {
+            _host = uri.Host;
+            _port = uri.Port > 0 ? (ushort)uri.Port : ushort.Parse(configuration["Rcon:Port"] ?? "25575");
+        }
+        else
+        {
+            _host = rawHost;
+            _port = ushort.Parse(configuration["Rcon:Port"] ?? "25575");
+        }
         _password = configuration["Rcon:Password"] ?? throw new InvalidOperationException("Rcon:Password is required");
         _commandDelayMs = int.Parse(configuration["Rcon:CommandDelayMs"] ?? "50");
     }
