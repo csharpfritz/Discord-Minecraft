@@ -50,6 +50,7 @@ public class DiscordBotWorker(
         {
             logger.LogInformation("Discord bot is ready. Guilds: {GuildCount}", client.Guilds.Count);
             await RegisterSlashCommandsAsync();
+            await SyncGuildsAsync();
         };
 
         client.SlashCommandExecuted += HandleSlashCommandAsync;
@@ -349,6 +350,79 @@ public class DiscordBotWorker(
                 evt.OldName, evt.NewName, evt.GuildId);
         }
     }
+
+    private async Task SyncGuildsAsync()
+    {
+        try
+        {
+            var httpClient = httpClientFactory.CreateClient("BridgeApi");
+            var totalCategories = 0;
+            var totalChannels = 0;
+
+            foreach (var guild in client.Guilds)
+            {
+                var channelGroups = new List<SyncChannelGroup>();
+                var everyoneRole = guild.EveryoneRole;
+
+                foreach (var category in guild.CategoryChannels)
+                {
+                    // Skip categories where @everyone has ViewChannel explicitly denied
+                    var everyoneOverwrite = category.GetPermissionOverwrite(everyoneRole);
+                    if (everyoneOverwrite.HasValue &&
+                        everyoneOverwrite.Value.ViewChannel == PermValue.Deny)
+                        continue;
+
+                    var channels = new List<SyncChannel>();
+
+                    foreach (var channel in category.Channels.OfType<SocketTextChannel>())
+                    {
+                        // Skip text channels where @everyone has ViewChannel explicitly denied
+                        var channelOverwrite = channel.GetPermissionOverwrite(everyoneRole);
+                        if (channelOverwrite.HasValue &&
+                            channelOverwrite.Value.ViewChannel == PermValue.Deny)
+                            continue;
+
+                        channels.Add(new SyncChannel(channel.Id.ToString(), channel.Name, channel.Position));
+                    }
+
+                    channelGroups.Add(new SyncChannelGroup(
+                        category.Id.ToString(), category.Name, category.Position, channels));
+                }
+
+                var syncRequest = new SyncRequest(guild.Id.ToString(), channelGroups);
+                var response = await httpClient.PostAsJsonAsync("/api/mappings/sync", syncRequest);
+
+                if (response.IsSuccessStatusCode)
+                {
+                    totalCategories += channelGroups.Count;
+                    totalChannels += channelGroups.Sum(g => g.Channels.Count);
+                    logger.LogInformation(
+                        "Synced guild {GuildName} ({GuildId}): {Categories} categories, {Channels} channels",
+                        guild.Name, guild.Id, channelGroups.Count,
+                        channelGroups.Sum(g => g.Channels.Count));
+                }
+                else
+                {
+                    logger.LogWarning(
+                        "Failed to sync guild {GuildName} ({GuildId}): {StatusCode}",
+                        guild.Name, guild.Id, response.StatusCode);
+                }
+            }
+
+            logger.LogInformation(
+                "Guild sync complete: {TotalCategories} categories, {TotalChannels} channels across {GuildCount} guilds",
+                totalCategories, totalChannels, client.Guilds.Count);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Guild sync failed — bot will continue running without initial sync");
+        }
+    }
+
+    // DTOs for /api/mappings/sync endpoint
+    private record SyncRequest(string GuildId, List<SyncChannelGroup> ChannelGroups);
+    private record SyncChannelGroup(string DiscordId, string Name, int Position, List<SyncChannel> Channels);
+    private record SyncChannel(string DiscordId, string Name, int Position = 0);
 
     private async Task PublishEventAsync(DiscordChannelEvent evt)
     {
