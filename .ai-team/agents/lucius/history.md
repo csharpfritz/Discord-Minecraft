@@ -164,3 +164,10 @@
 📌 Team update (2026-02-12): /status and /navigate slash commands added with Bridge API endpoints — decided by Oracle
 📌 Team update (2026-02-12): Startup guild sync added to DiscordBotWorker — populates DB on bot ready — decided by Oracle
 📌 Team update (2026-02-12): Sync endpoint now creates GenerationJob records and pushes to Redis queue — decided by Oracle
+
+### RCON Host Resolution Fix — Docker Hostname vs Localhost
+
+- **Root cause:** `minecraft.GetEndpoint("rcon")` resolved to `tcp://minecraft:25575` — the Docker container hostname. The WorldGen worker runs as a .NET project on the host machine, not inside Docker, so `Dns.GetHostAddressesAsync("minecraft")` failed because the Docker container name is only resolvable within the Docker network.
+- **Fix:** Changed `AppHost.cs` line 49 from `.WithEnvironment("Rcon__Host", minecraft.GetEndpoint("rcon"))` to `.WithEnvironment("Rcon__Host", "localhost")`. The worker now connects to `localhost:25675` (the host-mapped port), which Docker forwards to container port 25575.
+- **RconService.cs unchanged:** With `"localhost"` as the config value, `Uri.TryCreate("localhost", UriKind.Absolute, ...)` returns false, so the else branch sets `_host = "localhost"` and `_port = 25675` from `Rcon:Port` config. No URI parsing issues.
+- Key lesson: Aspire's `GetEndpoint()` returns Docker-network-internal URIs. For .NET projects running on the host (not as containers), pass explicit `localhost` + host-mapped port instead of using endpoint references.
