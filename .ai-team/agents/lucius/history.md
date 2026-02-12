@@ -152,3 +152,11 @@
 - Added `CoreRCON 5.4.2` NuGet to `AppHost.csproj` (same version as WorldGen.Worker)
 - No separate health checks NuGet needed — `Aspire.Hosting.AppHost 13.1.0` transitively provides `Microsoft.Extensions.Diagnostics.HealthChecks 10.0.1`
 - CoreRCON's `RCON` class implements `IDisposable` (not `IAsyncDisposable`) — use `using var` not `await using`
+
+### RCON Configuration Fixes — Port Mapping and URI Parsing
+
+- **Port mapping bug:** `AppHost.cs` had `targetPort: 25675` for the RCON endpoint, but `server.properties` defines `rcon.port=25575` inside the container. Docker's `targetPort` is the CONTAINER-side port, `port` is the HOST-side port. Fixed to `targetPort: 25575, port: 25675` so traffic from host:25675 reaches container:25575.
+- **URI parsing in RconService:** Aspire's `GetEndpoint("rcon")` returns a full URI like `tcp://hostname:25675`, but `RconService` was passing it directly to `Dns.GetHostAddressesAsync()` which expects a bare hostname. Fixed by parsing the config value with `Uri.TryCreate()` — extracts hostname and port from the URI. Falls back to treating the value as a plain hostname if it's not a valid URI (backward compatible).
+- **Rcon__Port env var retained as fallback:** When the URI includes a port, it takes precedence. When it doesn't (port <= 0), falls back to `Rcon:Port` config or default 25575.
+- **MinecraftHealthCheck port confirmed correct:** `RconPort = 25675` in the health check is the HOST-side port, which is correct since the health check runs in the AppHost process on the host machine.
+- Key lesson: In Aspire's `.WithEndpoint()`, `targetPort` = container internal port (must match what the app inside listens on), `port` = host external port (what other services on the host connect to).
