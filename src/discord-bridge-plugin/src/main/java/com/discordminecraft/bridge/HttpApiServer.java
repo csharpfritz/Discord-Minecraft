@@ -28,11 +28,13 @@ public final class HttpApiServer {
 
     private final HttpServer server;
     private final BridgePlugin plugin;
+    private final BlueMapIntegration blueMap;
     private final Logger logger;
     private final Gson gson;
 
-    public HttpApiServer(int port, BridgePlugin plugin, Logger logger) throws IOException {
+    public HttpApiServer(int port, BridgePlugin plugin, BlueMapIntegration blueMap, Logger logger) throws IOException {
         this.plugin = plugin;
+        this.blueMap = blueMap;
         this.logger = logger;
         this.gson = new GsonBuilder().create();
 
@@ -42,6 +44,10 @@ public final class HttpApiServer {
         server.createContext("/health", this::handleHealth);
         server.createContext("/api/command", this::handleCommand);
         server.createContext("/api/players", this::handlePlayers);
+        server.createContext("/api/markers/village", this::handleVillageMarker);
+        server.createContext("/api/markers/building", this::handleBuildingMarker);
+        server.createContext("/api/markers/building/archive", this::handleArchiveBuildingMarker);
+        server.createContext("/api/markers/village/archive", this::handleArchiveVillageMarker);
     }
 
     public void start() {
@@ -136,6 +142,120 @@ public final class HttpApiServer {
         result.put("players", players);
         result.put("count", players.size());
         sendResponse(exchange, 200, gson.toJson(result));
+    }
+
+    /**
+     * POST /api/markers/village -- Create/update a village marker on BlueMap.
+     * Body: { "id": "...", "label": "...", "x": 0, "z": 0 }
+     */
+    private void handleVillageMarker(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendResponse(exchange, 405, errorJson("Method not allowed"));
+            return;
+        }
+
+        String body = readBody(exchange);
+        try {
+            JsonObject json = JsonParser.parseString(body).getAsJsonObject();
+            String id = json.get("id").getAsString();
+            String label = json.get("label").getAsString();
+            int x = json.get("x").getAsInt();
+            int z = json.get("z").getAsInt();
+
+            blueMap.setVillageMarker(id, label, x, z);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", true);
+            result.put("markerId", id);
+            sendResponse(exchange, 200, gson.toJson(result));
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to set village marker", e);
+            sendResponse(exchange, 400, errorJson("Invalid request: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * POST /api/markers/building -- Create/update a building marker on BlueMap.
+     * Body: { "id": "...", "label": "...", "x": 0, "z": 0 }
+     */
+    private void handleBuildingMarker(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendResponse(exchange, 405, errorJson("Method not allowed"));
+            return;
+        }
+
+        String body = readBody(exchange);
+        try {
+            JsonObject json = JsonParser.parseString(body).getAsJsonObject();
+            String id = json.get("id").getAsString();
+            String label = json.get("label").getAsString();
+            int x = json.get("x").getAsInt();
+            int z = json.get("z").getAsInt();
+
+            blueMap.setBuildingMarker(id, label, x, z);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", true);
+            result.put("markerId", id);
+            sendResponse(exchange, 200, gson.toJson(result));
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to set building marker", e);
+            sendResponse(exchange, 400, errorJson("Invalid request: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * POST /api/markers/building/archive -- Mark a building marker as archived.
+     * Body: { "id": "..." }
+     */
+    private void handleArchiveBuildingMarker(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendResponse(exchange, 405, errorJson("Method not allowed"));
+            return;
+        }
+
+        String body = readBody(exchange);
+        try {
+            JsonObject json = JsonParser.parseString(body).getAsJsonObject();
+            String id = json.get("id").getAsString();
+
+            blueMap.archiveBuildingMarker(id);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", true);
+            result.put("markerId", id);
+            sendResponse(exchange, 200, gson.toJson(result));
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to archive building marker", e);
+            sendResponse(exchange, 400, errorJson("Invalid request: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * POST /api/markers/village/archive -- Mark a village marker as archived.
+     * Body: { "id": "..." }
+     */
+    private void handleArchiveVillageMarker(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendResponse(exchange, 405, errorJson("Method not allowed"));
+            return;
+        }
+
+        String body = readBody(exchange);
+        try {
+            JsonObject json = JsonParser.parseString(body).getAsJsonObject();
+            String id = json.get("id").getAsString();
+
+            blueMap.archiveVillageMarker(id);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", true);
+            result.put("markerId", id);
+            sendResponse(exchange, 200, gson.toJson(result));
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to archive village marker", e);
+            sendResponse(exchange, 400, errorJson("Invalid request: " + e.getMessage()));
+        }
     }
 
     private void sendResponse(HttpExchange exchange, int statusCode, String body) throws IOException {

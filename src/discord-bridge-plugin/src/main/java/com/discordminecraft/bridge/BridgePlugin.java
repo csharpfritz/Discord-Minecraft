@@ -12,6 +12,7 @@ public final class BridgePlugin extends JavaPlugin {
 
     private HttpApiServer httpServer;
     private RedisPublisher redisPublisher;
+    private BlueMapIntegration blueMapIntegration;
 
     @Override
     public void onEnable() {
@@ -29,13 +30,18 @@ public final class BridgePlugin extends JavaPlugin {
             getLogger().log(Level.SEVERE, "Failed to connect to Redis", e);
         }
 
+        // Initialize BlueMap integration
+        blueMapIntegration = new BlueMapIntegration(getLogger());
+        blueMapIntegration.enable();
+        getLogger().info("BlueMap integration initialized");
+
         // Register player event listener
         getServer().getPluginManager().registerEvents(
                 new PlayerEventListener(this, redisPublisher), this);
 
         // Start HTTP API server
         try {
-            httpServer = new HttpApiServer(httpPort, this, getLogger());
+            httpServer = new HttpApiServer(httpPort, this, blueMapIntegration, getLogger());
             httpServer.start();
             getLogger().info("HTTP API started on port " + httpPort);
         } catch (Exception e) {
@@ -52,11 +58,20 @@ public final class BridgePlugin extends JavaPlugin {
             getLogger().info("HTTP API stopped");
         }
 
+        if (blueMapIntegration != null) {
+            blueMapIntegration.disable();
+            getLogger().info("BlueMap integration disabled");
+        }
+
         if (redisPublisher != null) {
             redisPublisher.close();
             getLogger().info("Redis connection closed");
         }
 
         getLogger().info("DiscordBridge plugin disabled");
+    }
+
+    public BlueMapIntegration getBlueMapIntegration() {
+        return blueMapIntegration;
     }
 }
