@@ -35,4 +35,17 @@
 📌 Team update (2026-02-11): Job processor maps VillageJobPayload.VillageName→Name, BuildingJobPayload.ChannelName→Name, CenterX/Z→VillageCenterX/Z — decided by Lucius
 📌 Team update (2026-02-12): Sprint work items are now GitHub Issues with milestones and squad-colored labels — decided by Jeff and Gordon
 
- Team update (2026-02-12): README.md created with project overview, architecture, getting started, and squad roster with shields.io badges  decided by Gordon
+📌 Team update (2026-02-12): README.md created with project overview, architecture, getting started, and squad roster with shields.io badges — decided by Gordon
+
+📌 Team update (2026-02-12): Only publicly accessible Discord channels are mapped to Minecraft village buildings — private/restricted channels excluded — decided by Jeffrey T. Fritz
+
+📌 S3-03 complete (2026-02-12): Minecart track generation implemented — TrackGenerator creates L-shaped rail paths between villages at y=65 (elevated trackbed on stone bricks at y=64). Powered rails every 8 blocks with redstone blocks underneath for permanent activation. Station platforms (7×3) placed 30 blocks south of village center with angle-based slot assignment for multiple destinations. Each platform has departure/arrival oak_wall_signs, button-activated dispenser with 64 minecarts, glowstone corner lighting, stone brick slab walkways. CreateTrack job type added to WorldGenJobType enum with TrackJobPayload DTO. Registered as singleton ITrackGenerator in DI.
+📌 Learning (2026-02-12): Minecraft powered rails need a redstone signal to stay powered — placing a redstone_block under each powered rail provides permanent activation without external circuits
+📌 Learning (2026-02-12): Rails cannot be placed diagonally in Minecraft — use L-shaped paths (axis-aligned segments) for track routing between villages
+📌 Learning (2026-02-12): Station platform slot assignment uses Atan2 angle-based hashing to deterministically assign platforms per destination direction — prevents overlapping when multiple tracks terminate at the same village
+📌 Learning (2026-02-12): Dispensers facing=up spawn minecarts on top when activated by button — use /data merge to pre-load minecart items into dispenser inventory
+📌 Learning (2026-02-12): Shared git working directory with concurrent agents causes stash/checkout conflicts — use GitHub push_files API for atomic commits when environment is shared
+
+📌 S3-04 complete (2026-02-12): Track routing on village creation — WorldGenJobProcessor now enqueues CreateTrack jobs for every existing non-archived village after a CreateVillage job completes successfully. First village is handled gracefully (no tracks needed, logged informatively). Track jobs are queued AFTER village generation completes, ensuring the village is fully built before track generation begins. Station signs at existing villages are updated automatically because each CreateTrack job generates new station platforms with destination signs at both ends via the existing TrackGenerator.
+📌 Learning (2026-02-12): Track routing is a follow-up concern of the job processor, not the event consumer — enqueue CreateTrack jobs after CreateVillage succeeds to guarantee correct ordering
+📌 Learning (2026-02-12): Existing station sign updates happen naturally through new platform creation — each TrackGenerator.GenerateAsync call builds platforms with signs at both the source and destination village, so connecting a new village automatically adds signs at existing ones
