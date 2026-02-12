@@ -140,3 +140,15 @@
 📌 Team update (2026-02-12): Sprint 3 test specs written — 14 channel deletion + 8 E2E smoke tests, reusing BridgeApiFactory — decided by Nightwing
 📌 Team update (2026-02-12): Paper Bridge Plugin uses JDK HttpServer + Jedis + Bukkit scheduler, player events on events:minecraft:player — decided by Oracle
 📌 Team update (2026-02-12): Port reassignment — decided by Lucius, requested by Jeff
+
+### RCON Health Check for Minecraft Container
+
+- Added `MinecraftHealthCheck : IHealthCheck` in `src/AppHost/MinecraftHealthCheck.cs` — connects to RCON at `localhost:25675` via CoreRCON, sends `seed` command, returns Healthy on success or Unhealthy on failure/timeout
+- Health check uses `IConfiguration` to read the RCON password from `Parameters:rcon-password` (Aspire secret parameter)
+- 5-second timeout via `CancellationTokenSource.CreateLinkedTokenSource` + `CancelAfter` — prevents hanging during MC startup
+- RCON connection is `using`-disposed after each check (no persistent connection)
+- Registered in `AppHost.cs` via `builder.Services.AddHealthChecks().AddCheck<MinecraftHealthCheck>("minecraft-rcon")`
+- Wired to the minecraft container via `.WithHealthCheck("minecraft-rcon")` — Aspire dashboard now shows the container as unhealthy/starting until RCON responds
+- Added `CoreRCON 5.4.2` NuGet to `AppHost.csproj` (same version as WorldGen.Worker)
+- No separate health checks NuGet needed — `Aspire.Hosting.AppHost 13.1.0` transitively provides `Microsoft.Extensions.Diagnostics.HealthChecks 10.0.1`
+- CoreRCON's `RCON` class implements `IDisposable` (not `IAsyncDisposable`) — use `using var` not `await using`
