@@ -51,3 +51,21 @@
 
 📌 Team update (2026-02-12): Account linking deferred from Sprint 3 — S3-02 closed, /link removed from S3-01 (Paper Bridge Plugin), /unlink removed from S3-06 (Discord slash commands) — decided by Jeffrey T. Fritz
 📌 Team update (2026-02-12): Only publicly accessible Discord channels are mapped to Minecraft village buildings — private/restricted channels excluded — decided by Jeffrey T. Fritz
+
+- **Paper Bridge Plugin (S3-01)** created under `src/discord-bridge-plugin/`. Java/Gradle project targeting Paper API 1.21.4, Java 21 toolchain. Package: `com.discordminecraft.bridge`.
+- **Plugin architecture:** `BridgePlugin` (JavaPlugin) → `HttpApiServer` (JDK HttpServer on configurable port), `RedisPublisher` (Jedis pool), `PlayerEventListener` (Bukkit events).
+- **HTTP API endpoints:** `GET /health` (server status), `POST /api/command` (execute server commands on main thread), `GET /api/players` (list online players with coordinates).
+- **Redis player events:** Published to `events:minecraft:player` channel. Schema: `{ eventType, playerUuid, playerName, timestamp }` in camelCase JSON via Gson. Async publish via Bukkit scheduler to avoid blocking main thread.
+- **RedisPublisher uses Jedis 5.2.0** with `JedisPool` (maxTotal=4, maxIdle=2). Channel constant `CHANNEL_PLAYER_EVENT` must match `RedisChannels.MinecraftPlayer` in Bridge.Data.
+- **`MinecraftPlayerEvent` DTO** added to `Bridge.Data/Events/` — mirrors Java-side schema for .NET consumer deserialization. Uses same `JsonSerializerDefaults.Web` pattern as `DiscordChannelEvent`.
+- **`RedisChannels.MinecraftPlayer`** constant added: `"events:minecraft:player"` — shared between Java plugin (producer) and .NET services (consumer).
+- **Plugin config:** `plugins/DiscordBridge/config.yml` — `http-port` (default 8080), `redis.host`, `redis.port`. Loaded via Paper's `saveDefaultConfig()`/`getConfig()`.
+- **Gradle build** copies output JAR to `src/AppHost/minecraft-data/plugins/` via `tasks.jar { doLast { ... } }`.
+- **Thread safety pattern:** All Bukkit API calls in HTTP handlers dispatched to main thread via `Bukkit.getScheduler().runTask()`. Redis publishes dispatched async via `runTaskAsynchronously()`.
+- **Concurrent git environment:** When multiple agents share a working directory, use git plumbing (`read-tree`, `write-tree`, `commit-tree`, `update-ref`) with `GIT_INDEX_FILE` to avoid branch-switching races.
+
+- **Slash commands: /status and /navigate (S3-06).** Added two new slash commands to `DiscordBotWorker`. `/status` calls `GET /api/status` returning village and building counts. `/navigate <channel>` calls `GET /api/navigate/{discordChannelId}` returning village name, building index, and XYZ coordinates. Both use `DeferAsync()` + `FollowupAsync()` pattern since they make HTTP calls. Edge cases: unmapped channels get a clear "no mapping" message, API failures show a warning.
+- **Bridge API endpoints for slash commands.** Added `GET /api/status` (village/building count) and `GET /api/navigate/{discordChannelId}` (channel→village/building mapping with coordinates) to `Bridge.Api/Program.cs`. Navigate endpoint includes `ChannelGroup` via `Include()` join.
+- **HttpClient via Aspire service discovery.** `IHttpClientFactory` with named client `"BridgeApi"` using `https+http://bridge-api` base address. Aspire's `WithReference(bridgeApi)` in AppHost makes the service discoverable. `AddServiceDefaults()` already configures service discovery and resilience on all HttpClients.
+- **Slash command response records.** `StatusResponse` and `NavigateResponse` are private records inside `DiscordBotWorker` for `ReadFromJsonAsync<T>()` deserialization. Uses `System.Net.Http.Json` (built into .NET 10).
+- **Concurrent branch hazard in shared workdir.** When multiple agents run simultaneously, another agent can switch the `HEAD` branch mid-work. Always verify `git branch` before committing — cherry-pick to correct branch if HEAD was moved.
