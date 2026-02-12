@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/AppHost/AppHost.csproj" />
+    <Project Path="src/Bridge.Api/Bridge.Api.csproj" />
+    <Project Path="src/Bridge.Data/Bridge.Data.csproj" />
+    <Project Path="src/DiscordBot.Service/DiscordBot.Service.csproj" />
+    <Project Path="src/ServiceDefaults/ServiceDefaults.csproj" />
+    <Project Path="src/WorldGen.Worker/WorldGen.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Bridge.Api.Tests/Bridge.Api.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/RconTest/RconTest.csproj" />
+  </Folder>
+</Solution>

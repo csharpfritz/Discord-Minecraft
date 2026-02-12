@@ -1,0 +1,22 @@
+<Project Sdk="Aspire.AppHost.Sdk/13.1.0">
+
+  <ItemGroup>
+    <ProjectReference Include="..\DiscordBot.Service\DiscordBot.Service.csproj" />
+    <ProjectReference Include="..\Bridge.Api\Bridge.Api.csproj" />
+    <ProjectReference Include="..\WorldGen.Worker\WorldGen.Worker.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.1.0" />
+    <PackageReference Include="Aspire.Hosting.Redis" Version="13.1.0" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UserSecretsId>af33d2db-a8b0-408b-8b59-6e724111411a</UserSecretsId>
+  </PropertyGroup>
+
+</Project>
