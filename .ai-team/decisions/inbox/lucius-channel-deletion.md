@@ -1,4 +1,0 @@
-### 2026-02-12: Channel deletion archives buildings via WorldGen job queue
-**By:** Lucius
-**What:** Channel and category deletion events now enqueue `ArchiveBuilding` and `ArchiveVillage` jobs to the Redis worldgen queue, rather than only marking `IsArchived=true` in PostgreSQL. The WorldGen Worker processes these jobs via a new `BuildingArchiver` that updates signs with a red `[Archived]` prefix and blocks entrances with barrier blocks. Structures are never destroyed.
-**Why:** The original implementation only persisted the archived flag in the database but never communicated the archival to the Minecraft world. Without RCON commands, players would see no visual change in-game. The job queue pattern keeps the archival async and retryable, consistent with how village/building creation works. Barrier blocks prevent entry without destroying the structure, and red `[Archived]` signs make the status immediately visible.

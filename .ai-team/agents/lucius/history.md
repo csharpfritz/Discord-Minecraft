@@ -160,3 +160,7 @@
 - **Rcon__Port env var retained as fallback:** When the URI includes a port, it takes precedence. When it doesn't (port <= 0), falls back to `Rcon:Port` config or default 25575.
 - **MinecraftHealthCheck port confirmed correct:** `RconPort = 25675` in the health check is the HOST-side port, which is correct since the health check runs in the AppHost process on the host machine.
 - Key lesson: In Aspire's `.WithEndpoint()`, `targetPort` = container internal port (must match what the app inside listens on), `port` = host external port (what other services on the host connect to).
+📌 Team update (2026-02-12): Track routing triggered by village creation — WorldGenJobProcessor enqueues CreateTrack jobs after CreateVillage completes — decided by Batgirl
+📌 Team update (2026-02-12): /status and /navigate slash commands added with Bridge API endpoints — decided by Oracle
+📌 Team update (2026-02-12): Startup guild sync added to DiscordBotWorker — populates DB on bot ready — decided by Oracle
+📌 Team update (2026-02-12): Sync endpoint now creates GenerationJob records and pushes to Redis queue — decided by Oracle

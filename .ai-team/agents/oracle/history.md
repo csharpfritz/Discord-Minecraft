@@ -77,6 +77,10 @@
 - **HttpClient via Aspire service discovery.** `IHttpClientFactory` with named client `"BridgeApi"` using `https+http://bridge-api` base address. Aspire's `WithReference(bridgeApi)` in AppHost makes the service discoverable. `AddServiceDefaults()` already configures service discovery and resilience on all HttpClients.
 - **Slash command response records.** `StatusResponse` and `NavigateResponse` are private records inside `DiscordBotWorker` for `ReadFromJsonAsync<T>()` deserialization. Uses `System.Net.Http.Json` (built into .NET 10).
 - **Concurrent branch hazard in shared workdir.** When multiple agents run simultaneously, another agent can switch the `HEAD` branch mid-work. Always verify `git branch` before committing — cherry-pick to correct branch if HEAD was moved.
+📌 Team update (2026-02-12): Track routing triggered by village creation — WorldGenJobProcessor enqueues CreateTrack jobs after CreateVillage completes — decided by Batgirl
+📌 Team update (2026-02-12): RCON config fixes — port mapping (targetPort: 25575, port: 25675) and URI parsing in RconService — decided by Lucius
+📌 Team update (2026-02-12): MinecraftHealthCheck added — Aspire dashboard shows MC as unhealthy until RCON responds — decided by Lucius
+📌 Team update (2026-02-12): Sync endpoint now creates GenerationJob records and pushes to Redis queue — decided by Oracle
 📌 Team update (2026-02-12): Minecart track layout — L-shaped paths at y=65, stations 30 blocks south of village center, angle-based platform slots — decided by Batgirl
 📌 Team update (2026-02-12): Channel deletion now enqueues ArchiveBuilding/ArchiveVillage jobs to Redis worldgen queue — BuildingArchiver updates signs + blocks entrances — decided by Lucius
 📌 Team update (2026-02-12): BlueMap integration added as S3-08 — drop-in Paper plugin, port 8100 via Aspire, Java API markers, /map Discord command (Oracle owns) — decided by Gordon

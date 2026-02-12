@@ -55,3 +55,8 @@
 📌 S3-04 complete (2026-02-12): Track routing on village creation — WorldGenJobProcessor now enqueues CreateTrack jobs for every existing non-archived village after a CreateVillage job completes successfully. First village is handled gracefully (no tracks needed, logged informatively). Track jobs are queued AFTER village generation completes, ensuring the village is fully built before track generation begins. Station signs at existing villages are updated automatically because each CreateTrack job generates new station platforms with destination signs at both ends via the existing TrackGenerator.
 📌 Learning (2026-02-12): Track routing is a follow-up concern of the job processor, not the event consumer — enqueue CreateTrack jobs after CreateVillage succeeds to guarantee correct ordering
 📌 Learning (2026-02-12): Existing station sign updates happen naturally through new platform creation — each TrackGenerator.GenerateAsync call builds platforms with signs at both the source and destination village, so connecting a new village automatically adds signs at existing ones
+📌 Team update (2026-02-12): RCON config fixes — port mapping (targetPort: 25575, port: 25675) and URI parsing in RconService — decided by Lucius
+📌 Team update (2026-02-12): MinecraftHealthCheck added — Aspire dashboard shows MC as unhealthy until RCON responds — decided by Lucius
+📌 Team update (2026-02-12): /status and /navigate slash commands added with Bridge API endpoints — decided by Oracle
+📌 Team update (2026-02-12): Startup guild sync added to DiscordBotWorker — populates DB on bot ready — decided by Oracle
+📌 Team update (2026-02-12): Sync endpoint now creates GenerationJob records and pushes to Redis queue — decided by Oracle

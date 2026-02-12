@@ -1,9 +1,0 @@
-### 2026-02-12: Sprint 3 test specs and channel deletion test architecture
-**By:** Nightwing
-**What:** Created comprehensive test specifications for all Sprint 3 features (Plugin, Tracks, Track Routing, Channel Deletion, Slash Commands, E2E) plus 14 concrete xUnit integration tests for channel deletion (S3-05) and 8 E2E smoke tests (S3-07). Tests reuse existing `BridgeApiFactory` infrastructure. Two tests are `Skip`-ped pending `/api/status` and `/api/navigate` endpoint implementation. Channel deletion tests validate archival idempotency, API response accuracy, building index continuity, null-coordinate handling, and rapid-fire event processing.
-**Why:** Sprint 3 implementation is in parallel. Getting test specs and concrete test cases written now means: (1) implementers know exactly what behavior is expected, (2) edge cases are documented before code is written (shift-left), (3) 14 green tests on the channel deletion path provide immediate regression coverage. The gap identified — event consumer doesn't enqueue UpdateBuilding jobs on deletion — is flagged in the spec as a Sprint 3 implementation item for Lucius.
-
-### 2026-02-12: Channel deletion does NOT enqueue archive jobs (current state)
-**By:** Nightwing
-**What:** The current `DiscordEventConsumer.HandleChannelDeletedAsync` only sets `IsArchived = true` on the DB record. It does NOT create a `GenerationJob` or enqueue a Redis job for sign updates or barrier placement. The Sprint 3 acceptance criteria (S3-05) requires these archive jobs. Test spec D-07 and D-08 document the expected behavior.
-**Why:** This is a gap between current implementation and Sprint 3 requirements. Lucius (assigned to S3-05) needs to add job enqueueing for channel/group deletion to generate UpdateBuilding jobs that trigger sign updates ("[Archived]") and barrier placement in Minecraft.

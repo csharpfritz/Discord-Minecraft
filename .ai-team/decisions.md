@@ -141,15 +141,17 @@
 **Why:** User request — provides visual discovery of the Discord-to-Minecraft world mapping without requiring players to join the server.
 
 ### 2026-02-12: BlueMap integration architecture for interactive web map
-**By:** Gordon
-**What:** BlueMap (Paper plugin) added to Sprint 3 as S3-08 (Issue #10). Architecture decisions:
-1. **Deployment** — BlueMap JAR installed in the same Aspire-mounted `plugins/` directory as the Bridge Plugin. No separate container; it runs inside the Paper MC server process.
-2. **Port exposure** — BlueMap's built-in web server (port 8100) exposed through Aspire container port mapping on the Paper MC container, same pattern as RCON (25575) and MC (25565).
-3. **Marker integration** — Bridge Plugin uses BlueMap's Java API (same JVM, direct API calls) to create/update marker sets for villages and building markers for channels. No HTTP round-trips needed.
-4. **Marker lifecycle** — Markers created on village/building generation, updated on archive (visual change or removal). Bridge Plugin already handles these events via its HTTP API from .NET services.
-5. **Discord `/map` command** — Returns a deterministic URL (Aspire host + BlueMap port). Optional channel argument deep-links to a building marker. Added to S3-06 scope (Oracle).
-6. **Ownership** — Oracle owns this item (squad:oracle label) since it spans Paper plugin integration and Discord bot commands.
-**Why:** BlueMap is the lightest integration path — it's a drop-in Paper plugin that auto-renders the world and exposes a marker API. No separate rendering service, no additional database, no custom web frontend. The superflat world renders cleanly. Markers via the Java API avoid a secondary HTTP integration layer. Port mapping through Aspire keeps the web server discoverable without manual Docker config.
+**By:** Gordon (architecture), Oracle (implementation)
+**What:** BlueMap (Paper plugin) added to Sprint 3 as S3-08 (Issue #10). Architecture and implementation decisions:
+1. **Deployment** — BlueMap JAR installed in the same Aspire-mounted `plugins/` directory as the Bridge Plugin. No separate container; it runs inside the Paper MC server process. `softdepend` in `plugin.yml` ensures graceful degradation if BlueMap JAR is absent.
+2. **Port exposure** — BlueMap's built-in web server (port 8100) exposed through Aspire container port mapping on the Paper MC container, same pattern as RCON (25575) and MC (25565). Web server binds `0.0.0.0:8100` for Docker accessibility.
+3. **Marker integration** — `BlueMapIntegration` class manages two marker sets (`discord-villages`, `discord-buildings`) via BlueMapAPI 2.7.2 (`compileOnly` dependency from `https://repo.bluecolored.de/releases`). Uses `BlueMapAPI.onEnable`/`onDisable` lifecycle hooks. `ConcurrentHashMap` cache for API reload resilience. Only overworld maps receive markers.
+4. **Marker HTTP endpoints** — .NET services call Bridge Plugin HTTP API: `POST /api/markers/village`, `POST /api/markers/building`, `POST /api/markers/building/archive`, `POST /api/markers/village/archive`. Schema: `{ id, label, x, z }` for create; `{ id }` for archive.
+5. **Marker lifecycle** — Markers created on village/building generation, updated on archive (visual change or removal). Bridge Plugin handles these events via its HTTP API from .NET services.
+6. **Discord `/map` command** — Returns a deterministic URL (Aspire host + BlueMap port). Optional channel argument deep-links to a building marker via `#discord-buildings:{channelId}` hash fragment. `BlueMap__BaseUrl` env var passed to Discord bot, resolving to `configuration["BlueMap:BaseUrl"]` with fallback `http://localhost:8100`.
+7. **BlueMap config** — version-controlled at `src/AppHost/minecraft-data/plugins/BlueMap/{core,webserver}.conf`. `accept-download: true` enables auto-download of BlueMap web assets.
+8. **Ownership** — Oracle owns this item (squad:oracle label) since it spans Paper plugin integration and Discord bot commands.
+**Why:** BlueMap is the lightest integration path — it's a drop-in Paper plugin that auto-renders the world and exposes a marker API. No separate rendering service, no additional database, no custom web frontend. The superflat world renders cleanly. The HTTP endpoints exist because .NET services (which trigger village/building creation) need to notify the plugin to update markers. ConcurrentHashMap + restore-on-reload handles BlueMap's API lifecycle. Port mapping through Aspire keeps the web server discoverable without manual Docker config.
 
 ### 2026-02-12: Channel deletion archives buildings via WorldGen job queue
 **By:** Lucius (implementation), Nightwing (gap identification)
@@ -181,3 +183,45 @@
 
 Changes applied across branches: `main`, `squad/10-bluemap`, `squad/1-paper-bridge-plugin`, `squad/6-discord-slash-commands`. Files updated: `AppHost.cs`, `server.properties`, `webserver.conf`, `config.yml`, `DiscordBotWorker.cs`.
 **Why:** Jeff runs multiple Minecraft integration projects simultaneously. Default ports would conflict. The +100 offset keeps ports recognizable while avoiding collisions.
+
+### 2026-02-12: Track routing triggered by village creation completion
+**By:** Batgirl
+**What:** WorldGenJobProcessor now automatically enqueues CreateTrack jobs after each CreateVillage job completes successfully. For each new village, one CreateTrack job is enqueued per existing non-archived village, connecting the new village to the entire network. The first village in the world gets no track jobs (handled gracefully with an informational log). Track jobs are enqueued AFTER village generation is marked Completed, ensuring the village structure is fully built before any track generation begins. Station signs at existing villages are updated naturally — each CreateTrack job invokes TrackGenerator which creates new station platforms with destination signs at both the source and destination village.
+**Why:** Track routing must be a post-completion concern of the job processor, not the event consumer, because the village must be fully built before tracks can connect to it. Using the existing WorldGenJob queue pattern keeps track generation async, retryable, and consistent with all other generation work. The TrackGenerator already builds platforms with signs at both ends of each track, so no separate "update signs" mechanism is needed — connecting a new village to an existing one naturally creates a new platform with signs at the existing village.
+
+### 2026-02-12: /status and /navigate slash commands with Bridge API endpoints
+**By:** Oracle
+**What:**
+1. **Two new slash commands** — `/status` (village count, building count) and `/navigate <channel>` (village name, building index, XYZ coordinates). Registered globally in the `Ready` event alongside existing `/ping` and `/map` commands.
+2. **Two new Bridge API endpoints** — `GET /api/status` returns `{ villageCount, buildingCount }` (non-archived only). `GET /api/navigate/{discordChannelId}` returns full mapping including coordinates, archived status, and village center. Returns 404 for unmapped channels.
+3. **HttpClient via Aspire service discovery** — Named `HttpClient("BridgeApi")` with `https+http://bridge-api` base address registered in `DiscordBot.Service/Program.cs`. Leverages Aspire's existing `WithReference(bridgeApi)` and `AddServiceDefaults()` service discovery.
+4. **Defer/Followup pattern** — Both commands use `DeferAsync()` + `FollowupAsync()` since they make HTTP calls to Bridge API. This avoids Discord's 3-second interaction timeout.
+5. **Edge cases handled** — Unmapped channel shows clear message mentioning public-text-channel-in-category requirement. API unavailability shows warning. Invalid channel option handled gracefully.
+**Why:** Slash commands are the primary Discord user interface for world discovery. Using Aspire service discovery avoids hardcoded URLs and works across development/production environments. The Defer pattern is mandatory for any command making external HTTP calls due to Discord's strict response deadline. The `/api/navigate` endpoint was designed to return enough data for a rich embed without requiring multiple API calls.
+
+### 2026-02-12: Startup guild sync in DiscordBotWorker
+**By:** Oracle
+**What:** Added `SyncGuildsAsync()` to the Discord bot's `Ready` event handler. On startup, the bot iterates all guilds, collects publicly accessible categories and their text channels (filtering out channels where @everyone has ViewChannel explicitly denied), and POSTs a `SyncRequest` to `/api/mappings/sync` for each guild. This populates the Bridge API database with the current Discord channel structure so villages/buildings appear immediately. Key details:
+1. Called AFTER `RegisterSlashCommandsAsync` in the Ready handler
+2. Uses `GetPermissionOverwrite(guild.EveryoneRole)` to check `ViewChannel` — only explicit `Deny` is filtered; inherit/allow pass through
+3. Only `SocketTextChannel` types within categories are included (no voice, forum, or uncategorized channels)
+4. Wrapped in try/catch — sync failure logs an error but does NOT prevent the bot from running
+5. Sync DTOs (`SyncRequest`, `SyncChannelGroup`, `SyncChannel`) are private records in `DiscordBotWorker`
+**Why:** The `/api/mappings/sync` endpoint existed but was never called. Without an initial sync, zero villages/buildings would appear until individual channel events fired. This startup sync ensures the Minecraft world reflects the current Discord server structure immediately on bot ready.
+
+### 2026-02-12: Sync endpoint now creates GenerationJob records and pushes to Redis queue
+**By:** Oracle
+**What:** Fixed `/api/mappings/sync` to create `GenerationJob` records and push `WorldGenJob` envelopes to Redis `queue:worldgen` for NEW records (not updates). Previously, synced channels appeared in `/status` counts but nothing was built in Minecraft because the sync endpoint only created DB records without job enqueueing. Now matches the exact pattern from `DiscordEventConsumer.cs`. Idempotent — re-running sync won't duplicate jobs for existing records.
+**Why:** Without job enqueueing, the startup sync would populate the database but never trigger actual village/building generation in the Minecraft world. The sync endpoint must mirror the event consumer's behavior for new records.
+
+### 2026-02-12: RCON configuration fixes — port mapping and URI parsing
+**By:** Lucius
+**What:** Fixed two critical RCON issues preventing WorldGen from connecting to Minecraft:
+1. **Port mapping bug** — `AppHost.cs` had `targetPort: 25675` for RCON, but `server.properties` defines `rcon.port=25575` inside the container. Docker's `targetPort` is the container-side port. Fixed to `targetPort: 25575, port: 25675`.
+2. **URI parsing in RconService** — Aspire's `GetEndpoint("rcon")` returns `tcp://hostname:port`, but `RconService` was passing the full URI to `Dns.GetHostAddressesAsync()`. Fixed by parsing with `Uri.TryCreate()` to extract hostname and port. Falls back to plain hostname if not a URI.
+**Why:** Both issues prevented RCON connectivity. The port mismatch meant traffic was routed to the wrong internal port. The URI parsing issue meant DNS resolution failed on a URI string instead of a hostname.
+
+### 2026-02-12: MinecraftHealthCheck for Aspire dashboard
+**By:** Lucius
+**What:** Added `MinecraftHealthCheck : IHealthCheck` in `src/AppHost/MinecraftHealthCheck.cs`. Connects to RCON at `localhost:25675`, sends `seed` command, returns Healthy on success or Unhealthy on failure/timeout (5s). Registered via `builder.Services.AddHealthChecks().AddCheck<MinecraftHealthCheck>("minecraft-rcon")` and wired to the minecraft container via `.WithHealthCheck("minecraft-rcon")`.
+**Why:** Without a health check, Aspire dashboard showed the Minecraft container as healthy immediately on container start, before the server was actually ready to accept RCON commands. Dependent services would fail connecting during startup.
