@@ -97,3 +97,16 @@
  Team update (2026-02-12): README.md created with project overview, architecture, getting started, and squad roster with shields.io badges  decided by Gordon
 
 📌 Team update (2026-02-12): Only publicly accessible Discord channels are mapped to Minecraft village buildings — private/restricted channels excluded — decided by Jeffrey T. Fritz
+
+### Sprint 3 — S3-05: Channel Deletion Handling
+
+- Channel/category deletion now enqueues `ArchiveBuilding`/`ArchiveVillage` jobs to the Redis `queue:worldgen` in addition to setting `IsArchived=true` in PostgreSQL
+- `BuildingArchiver` in WorldGen.Worker handles in-world archival: updates all signs (entrance + floor) with red `[Archived]` prefix, blocks 3×3 entrance with `minecraft:barrier` blocks
+- `ArchiveVillage` job iterates all buildings in the group and archives each one via `BuildingArchiver`
+- Building coordinate recalculation uses the same ring formula as `BuildingGenerator`: `60 * cos/sin(index * 22.5°)` from village center
+- Sign text truncated to 10 chars (vs 15 in original) to leave room for `[Archived]` prefix on first line
+- Job payload DTOs: `ArchiveBuildingJobPayload` and `ArchiveVillageJobPayload` in `Bridge.Data/Jobs/`
+- `IBuildingArchiver` interface + `BuildingArchiver` in `WorldGen.Worker/Generators/`
+- `BuildingArchiveRequest` model in `WorldGen.Worker/Models/`
+- `DiscordEventConsumer.HandleChannelDeletedAsync` now includes `ChannelGroup` via `.Include()` for village center coords
+- `DiscordEventConsumer.HandleChannelGroupDeletedAsync` builds `ArchiveVillageJobPayload` with all building payloads
