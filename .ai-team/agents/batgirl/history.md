@@ -33,3 +33,4 @@
 📌 Team update (2026-02-11): Bridge API nullable coordinate columns (VillageX/Z on ChannelGroup, BuildingX/Z on Channel) — set by WorldGen Worker after generation — decided by Lucius
 📌 Team update (2026-02-11): Event consumer archives groups+channels on deletion, auto-creates groups on out-of-order events — decided by Lucius
 📌 Team update (2026-02-11): Job processor maps VillageJobPayload.VillageName→Name, BuildingJobPayload.ChannelName→Name, CenterX/Z→VillageCenterX/Z — decided by Lucius
+📌 Team update (2026-02-12): Sprint work items are now GitHub Issues with milestones and squad-colored labels — decided by Jeff and Gordon

@@ -35,3 +35,8 @@
 📌 Team update (2026-02-11): Building generation — 21×21, 4-floor, ring placement, wall signs — decided by Batgirl
 📌 Team update (2026-02-11): Job processor — polls queue:worldgen, 3 retries with exponential backoff — decided by Lucius
 📌 Team update (2026-02-11): Integration test infra — WebApplicationFactory + Testcontainers Redis + SQLite, nullable Max() fix — decided by Nightwing
+- Sprint 3 GitHub milestone number: **1** ("Sprint 3: Integration & Navigation")
+- Sprint 3 issue numbers: #1 (S3-01), #2 (S3-02), #3 (S3-03), #4 (S3-04), #5 (S3-05), #6 (S3-06), #7 (S3-07)
+- Label naming convention: `squad:{name}` — one label per squad member, used to tag issues by assignee
+- Label color assignments: gordon=#0052CC (blue), oracle=#7B61FF (purple), lucius=#0E8A16 (green), batgirl=#D93F0B (orange-red), nightwing=#006B75 (teal)
+📌 Team update (2026-02-12): Sprint work items are now GitHub Issues with milestones and squad-colored labels — decided by Jeff and Gordon

@@ -109,3 +109,13 @@
 **By:** Nightwing
 **What:** WebApplicationFactory + Testcontainers Redis + SQLite in-memory. Tests swap Aspire's Npgsql/Redis registrations. Fixed `DefaultIfEmpty(-1).MaxAsync()` cross-provider incompatibility by switching to nullable `Max()` pattern.
 **Why:** WebApplicationFactory provides real HTTP pipeline without Aspire overhead. SQLite avoids Docker dependency for DB layer. Testcontainers Redis needed for real pub/sub testing. Nullable Max() pattern works on all EF Core providers.
+
+### 2026-02-12: User directive — Sprint work items as GitHub Issues with milestones and squad labels
+**By:** Jeffrey T. Fritz (via Copilot)
+**What:** Going forward, all work items for a Sprint must be created as GitHub Issues. Each Sprint's issues must be grouped under a properly named GitHub milestone. Create color-coordinated labels for each squad member and apply them to issues assigned to that member.
+**Why:** User request — captured for team memory
+
+### 2026-02-12: Sprint 3 work items created as GitHub Issues
+**By:** Gordon
+**What:** Created milestone "Sprint 3: Integration & Navigation" (milestone #1) with 7 issues (#1–#7) covering: Paper Bridge Plugin, account linking, minecart tracks, track routing, channel deletion handling, slash commands, and E2E smoke tests. Created 5 color-coded squad labels (`squad:gordon`, `squad:oracle`, `squad:lucius`, `squad:batgirl`, `squad:nightwing`) for issue assignment tracking. Each issue includes full description, size, dependencies, and acceptance criteria derived from Sprint 3 Definition of Done.
+**Why:** Jeff requested sprint work items be tracked as GitHub Issues with milestones and squad-colored labels going forward. This provides visibility into sprint progress, enables per-squad filtering, and integrates with GitHub project boards.

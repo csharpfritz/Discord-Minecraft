@@ -45,3 +45,4 @@
 📌 Team update (2026-02-11): Bridge API endpoints + nullable coordinate columns (VillageX/Z, BuildingX/Z) — sync endpoint available for bot Ready event — decided by Lucius
 📌 Team update (2026-02-11): Event consumer uses DiscordChannelEvent.FromJson() from Bridge.Data.Events — ChannelUpdated filtered to name/position changes only — decided by Lucius
 📌 Team update (2026-02-11): DefaultIfEmpty(-1).MaxAsync() replaced with nullable Max() pattern in prod code for cross-provider compatibility — decided by Nightwing
+📌 Team update (2026-02-12): Sprint work items are now GitHub Issues with milestones and squad-colored labels — decided by Jeff and Gordon
