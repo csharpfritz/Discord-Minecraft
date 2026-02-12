@@ -60,3 +60,9 @@
 📌 Team update (2026-02-12): /status and /navigate slash commands added with Bridge API endpoints — decided by Oracle
 📌 Team update (2026-02-12): Startup guild sync added to DiscordBotWorker — populates DB on bot ready — decided by Oracle
 📌 Team update (2026-02-12): Sync endpoint now creates GenerationJob records and pushes to Redis queue — decided by Oracle
+
+📌 Medieval castle redesign (2026-02-12): BuildingGenerator redesigned from plain stone brick box to medieval castle keep — cobblestone walls with stone brick trim, oak log corner turrets, crenellated parapet, arrow slit windows, arched entrance, wall-mounted torches. Reduced from 4 floors to 2 for better proportions.
+📌 Learning (2026-02-12): Block placement order is CRITICAL — must be: foundation → walls → turrets → clear interior → floors → stairs → roof → windows → entrance → lighting → signs. Interior clear wipes anything placed before it (floors, lighting). Signs must be placed LAST on solid wall blocks.
+📌 Learning (2026-02-12): Wall-mounted torches (`wall_torch[facing=direction]`) solve the floating glowstone problem — they attach to solid interior walls and are placed after interior clear, so they never get erased.
+📌 Learning (2026-02-12): Superflat world surface is Y=-60 (bedrock -64, dirt -63 to -61, grass -60). All generators use BaseY = -60. BuildingArchiver must match BuildingGenerator's floor count and entrance dimensions.
+📌 RCON building skill created (2026-02-12): Comprehensive SKILL.md at .ai-team/skills/minecraft-rcon-building/ covering superflat coordinates, CoreRCON IPv4 patterns, block placement order, Aspire/Docker networking, and medieval castle patterns.
