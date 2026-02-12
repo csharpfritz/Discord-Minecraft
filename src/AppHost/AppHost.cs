@@ -1,4 +1,10 @@
+using AppHost;
+using Microsoft.Extensions.DependencyInjection;
+
 var builder = DistributedApplication.CreateBuilder(args);
+
+builder.Services.AddHealthChecks()
+    .AddCheck<MinecraftHealthCheck>("minecraft-rcon");
 
 var postgres = builder.AddPostgres("postgres")
     .AddDatabase("bridgedb");
@@ -18,7 +24,8 @@ var minecraft = builder.AddContainer("minecraft", "itzg/minecraft-server")
     .WithEndpoint(targetPort: 25665, port: 25665, name: "minecraft", scheme: "tcp")
     .WithEndpoint(targetPort: 25675, port: 25675, name: "rcon", scheme: "tcp")
     .WithEndpoint(targetPort: 8200, port: 8200, name: "bluemap", scheme: "http")
-    .WithBindMount("./minecraft-data", "/data");
+    .WithBindMount("./minecraft-data", "/data")
+    .WithHealthCheck("minecraft-rcon");
 
 var bridgeApi = builder.AddProject<Projects.Bridge_Api>("bridge-api")
     .WithReference(postgres)

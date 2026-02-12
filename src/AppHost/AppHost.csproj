@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Aspire.Hosting.PostgreSQL" Version="13.1.0" />
     <PackageReference Include="Aspire.Hosting.Redis" Version="13.1.0" />
+    <PackageReference Include="CoreRCON" Version="5.4.2" />
   </ItemGroup>
 
   <PropertyGroup>
