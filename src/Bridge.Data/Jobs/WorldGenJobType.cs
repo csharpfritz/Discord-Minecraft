@@ -4,5 +4,6 @@ public enum WorldGenJobType
 {
     CreateVillage,
     CreateBuilding,
-    UpdateBuilding
+    UpdateBuilding,
+    CreateTrack
 }
