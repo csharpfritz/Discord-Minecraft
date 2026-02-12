@@ -82,3 +82,7 @@
 📌 Team update (2026-02-12): BlueMap integration added as S3-08 — drop-in Paper plugin, port 8100 via Aspire, Java API markers, /map Discord command (Oracle owns) — decided by Gordon
 📌 Team update (2026-02-12): Sprint 3 test specs written — 14 channel deletion + 8 E2E smoke tests, reusing BridgeApiFactory — decided by Nightwing
 📌 Team update (2026-02-12): Port reassignment — decided by Lucius, requested by Jeff
+
+- **Startup guild sync (`SyncGuildsAsync`).** Added to `DiscordBotWorker.Ready` handler, called AFTER `RegisterSlashCommandsAsync`. Iterates `client.Guilds`, collects publicly accessible category+text channels (filters out channels where @everyone has `ViewChannel` explicitly denied via `GetPermissionOverwrite`), builds `SyncRequest` payload, and POSTs to `/api/mappings/sync` per guild. Wrapped in try/catch so sync failure doesn't prevent bot operation. Uses `IHttpClientFactory.CreateClient("BridgeApi")` with Aspire service discovery.
+- **Public channel filtering pattern.** `guild.EveryoneRole` → `channel.GetPermissionOverwrite(everyoneRole)` → check `PermValue.Deny` on `ViewChannel`. Only explicit denies are filtered; inherit/allow both pass through. Applied at both category and individual text channel level.
+- **Local sync DTOs.** `SyncRequest`, `SyncChannelGroup`, `SyncChannel` records defined as private nested types in `DiscordBotWorker` to match the Bridge API's endpoint contract. Not shared via Bridge.Data since they're only used by the bot's HTTP call.
