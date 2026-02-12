@@ -5,5 +5,7 @@ public enum WorldGenJobType
     CreateVillage,
     CreateBuilding,
     UpdateBuilding,
-    CreateTrack
+    CreateTrack,
+    ArchiveBuilding,
+    ArchiveVillage
 }
