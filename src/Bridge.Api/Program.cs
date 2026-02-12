@@ -1,8 +1,12 @@
+using System.Text.Json;
 using Bridge.Api;
 using Bridge.Data;
 using Bridge.Data.Entities;
+using Bridge.Data.Jobs;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
+
+var jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -31,8 +35,9 @@ if (app.Environment.IsDevelopment())
 app.MapGet("/health", () => Results.Ok("healthy"));
 
 // POST /api/mappings/sync — Full Discord→DB sync
-app.MapPost("/api/mappings/sync", async (SyncRequest request, BridgeDbContext db) =>
+app.MapPost("/api/mappings/sync", async (SyncRequest request, BridgeDbContext db, IConnectionMultiplexer redis) =>
 {
+    var redisDb = redis.GetDatabase();
     int created = 0, updated = 0;
 
     foreach (var groupDto in request.ChannelGroups)
@@ -58,15 +63,38 @@ app.MapPost("/api/mappings/sync", async (SyncRequest request, BridgeDbContext db
             };
             db.ChannelGroups.Add(group);
             created++;
+
+            await db.SaveChangesAsync();
+
+            // Create GenerationJob and enqueue to Redis
+            var villagePayload = new VillageJobPayload(
+                group.Id, group.VillageIndex, group.CenterX, group.CenterZ, group.Name);
+
+            var villageJob = new GenerationJob
+            {
+                Type = WorldGenJobType.CreateVillage.ToString(),
+                Payload = JsonSerializer.Serialize(villagePayload, jsonOptions),
+                Status = GenerationJobStatus.Pending
+            };
+            db.GenerationJobs.Add(villageJob);
+            await db.SaveChangesAsync();
+
+            var villageWorldGenJob = new WorldGenJob
+            {
+                JobType = WorldGenJobType.CreateVillage,
+                JobId = villageJob.Id,
+                Payload = JsonSerializer.Serialize(villagePayload, jsonOptions)
+            };
+            await redisDb.ListLeftPushAsync(RedisQueues.WorldGen, villageWorldGenJob.ToJson());
         }
         else
         {
             group.Name = groupDto.Name;
             group.Position = groupDto.Position;
             updated++;
-        }
 
-        await db.SaveChangesAsync();
+            await db.SaveChangesAsync();
+        }
 
         foreach (var channelDto in groupDto.Channels)
         {
@@ -90,6 +118,30 @@ app.MapPost("/api/mappings/sync", async (SyncRequest request, BridgeDbContext db
                 };
                 db.Channels.Add(channel);
                 created++;
+
+                await db.SaveChangesAsync();
+
+                // Create GenerationJob and enqueue to Redis
+                var buildingPayload = new BuildingJobPayload(
+                    group.Id, channel.Id, group.VillageIndex, channel.BuildingIndex,
+                    group.CenterX, group.CenterZ, channel.Name, group.Name);
+
+                var buildingJob = new GenerationJob
+                {
+                    Type = WorldGenJobType.CreateBuilding.ToString(),
+                    Payload = JsonSerializer.Serialize(buildingPayload, jsonOptions),
+                    Status = GenerationJobStatus.Pending
+                };
+                db.GenerationJobs.Add(buildingJob);
+                await db.SaveChangesAsync();
+
+                var buildingWorldGenJob = new WorldGenJob
+                {
+                    JobType = WorldGenJobType.CreateBuilding,
+                    JobId = buildingJob.Id,
+                    Payload = JsonSerializer.Serialize(buildingPayload, jsonOptions)
+                };
+                await redisDb.ListLeftPushAsync(RedisQueues.WorldGen, buildingWorldGenJob.ToJson());
             }
             else
             {
