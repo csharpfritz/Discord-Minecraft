@@ -22,10 +22,10 @@
 **What:** When a Discord channel is deleted, its corresponding Minecraft building is marked archived (signs updated, entrance blocked with barriers) but NOT demolished.
 **Why:** Destroying structures while players might be inside is dangerous. Archived buildings preserve world continuity and can be repurposed if channels are recreated. This is the safe default — we can add a `/demolish` admin command later if needed.
 
-### 2026-02-11: Account linking via one-time codes, not OAuth
-**By:** Gordon
-**What:** Players link Discord↔Minecraft accounts by generating a 6-char code via Discord `/link`, then typing `/link <code>` in-game within 5 minutes.
-**Why:** Avoids OAuth complexity. Player proves ownership of both accounts by being present in both systems simultaneously. Redis TTL handles expiry automatically. Simple for players to understand.
+### 2026-02-11 → 2026-02-12: Account linking — designed then deferred
+**By:** Gordon (design), Jeffrey T. Fritz (deferral)
+**What:** Original design: players link Discord↔Minecraft accounts via 6-char one-time code (Discord `/link` → in-game `/link <code>`, 5-min Redis TTL). **Deferred (2026-02-12):** Account linking removed from Sprint 3 scope. S3-02 closed, `/link` removed from Paper Bridge Plugin (S3-01), `/unlink` removed from Discord slash commands (S3-06). Feature will be revisited in a future sprint.
+**Why:** Design avoided OAuth complexity. Deferral per user request — not ready to facilitate account linking yet.
 
 ### 2026-02-11: Discord bot uses singleton DiscordSocketClient with BackgroundService pattern
 **By:** Oracle
@@ -124,3 +124,8 @@
 **By:** Gordon
 **What:** Created `README.md` at repository root covering: project description (Discord→Minecraft bridge concept), architecture table (3 services + infra), getting started (prerequisites, user-secrets setup, `dotnet run`), squad roster with shields.io color-coded badges matching GitHub label colors, and project status linking to Sprint 3 milestone.
 **Why:** Jeff requested a README with squad roster. The badge colors match the `squad:{name}` GitHub label colors for visual consistency. Shields.io badges render well on GitHub and provide instant visual identification of team members.
+
+### 2026-02-12: Only map publicly accessible Discord channels to villages
+**By:** Jeffrey T. Fritz (via Copilot)
+**What:** Only create village buildings for publicly accessible channels in the Discord server. Private channels, restricted channels, and channels not visible to @everyone should be excluded from the channel-to-village mapping.
+**Why:** User request — ensures the Minecraft world only reflects the public structure of the Discord server.
