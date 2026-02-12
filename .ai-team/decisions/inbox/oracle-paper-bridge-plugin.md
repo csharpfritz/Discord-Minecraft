@@ -1,0 +1,9 @@
+### 2026-02-12: Paper Bridge Plugin architecture — JDK HttpServer + Jedis + Bukkit scheduler
+**By:** Oracle
+**What:** The Paper Bridge Plugin uses JDK's built-in `com.sun.net.httpserver.HttpServer` for the HTTP API (no external web framework), Jedis 5.2.0 for Redis pub/sub, and Gson for JSON serialization. All Bukkit API calls from HTTP handlers are dispatched to the main server thread via `Bukkit.getScheduler().runTask()`. Redis publishes are dispatched asynchronously via `runTaskAsynchronously()`. The HTTP port is configurable via `config.yml`. Dependencies are shaded into the plugin JAR via Gradle's `from(configurations.runtimeClasspath)` pattern.
+**Why:** JDK HttpServer has zero dependencies and is already available in the runtime — keeps the plugin lightweight without pulling in Netty, Spark, or Javalin. Jedis is the simplest Redis client for Java with connection pooling. Main-thread dispatch is mandatory because Bukkit's API is not thread-safe. Async Redis publish prevents blocking the server tick loop. Shading dependencies avoids classpath conflicts with other plugins.
+
+### 2026-02-12: Player event Redis channel — events:minecraft:player
+**By:** Oracle
+**What:** Player join/leave events are published to Redis channel `events:minecraft:player` with schema `{ eventType: "PlayerJoined"|"PlayerLeft", playerUuid, playerName, timestamp }`. The channel name is registered in both Java (`RedisPublisher.CHANNEL_PLAYER_EVENT`) and .NET (`RedisChannels.MinecraftPlayer`). A corresponding `MinecraftPlayerEvent` DTO was added to `Bridge.Data/Events/` for .NET-side deserialization.
+**Why:** Follows the established pattern from Sprint 2 — channel name constants shared between producers and consumers, matching DTO records on both sides. The `events:minecraft:*` namespace was already reserved in the architecture doc. camelCase JSON matches the existing `DiscordChannelEvent` serialization convention.

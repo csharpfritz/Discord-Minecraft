@@ -6,4 +6,5 @@ namespace Bridge.Data.Events;
 public static class RedisChannels
 {
     public const string DiscordChannel = "events:discord:channel";
+    public const string MinecraftPlayer = "events:minecraft:player";
 }
