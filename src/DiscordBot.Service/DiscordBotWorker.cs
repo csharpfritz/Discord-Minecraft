@@ -2,12 +2,14 @@ using Bridge.Data.Events;
 using Discord;
 using Discord.WebSocket;
 using StackExchange.Redis;
+using System.Net.Http.Json;
 
 namespace DiscordBot.Service;
 
 public class DiscordBotWorker(
     DiscordSocketClient client,
     IConnectionMultiplexer redis,
+    IHttpClientFactory httpClientFactory,
     IConfiguration configuration,
     ILogger<DiscordBotWorker> logger) : BackgroundService
 {
@@ -82,10 +84,32 @@ public class DiscordBotWorker(
             .WithDescription("Check if the bot is alive")
             .Build();
 
+        var statusCommand = new SlashCommandBuilder()
+            .WithName("status")
+            .WithDescription("Show world stats — village count and building count")
+            .Build();
+
+        var navigateCommand = new SlashCommandBuilder()
+            .WithName("navigate")
+            .WithDescription("Show which village and building a channel maps to, with coordinates")
+            .AddOption("channel", ApplicationCommandOptionType.Channel,
+                "The channel to look up", isRequired: true)
+            .Build();
+
+        var mapCommand = new SlashCommandBuilder()
+            .WithName("map")
+            .WithDescription("Get a link to the interactive BlueMap web map")
+            .AddOption("channel", ApplicationCommandOptionType.Channel,
+                "Deep-link to a specific channel's building on the map", isRequired: false)
+            .Build();
+
         try
         {
             await client.CreateGlobalApplicationCommandAsync(pingCommand);
-            logger.LogInformation("Registered /ping slash command");
+            await client.CreateGlobalApplicationCommandAsync(statusCommand);
+            await client.CreateGlobalApplicationCommandAsync(navigateCommand);
+            await client.CreateGlobalApplicationCommandAsync(mapCommand);
+            logger.LogInformation("Registered slash commands: /ping, /status, /navigate, /map");
         }
         catch (Exception ex)
         {
@@ -95,9 +119,147 @@ public class DiscordBotWorker(
 
     private async Task HandleSlashCommandAsync(SocketSlashCommand command)
     {
-        if (command.Data.Name == "ping")
+        switch (command.Data.Name)
         {
-            await command.RespondAsync("Pong! 🏓");
+            case "ping":
+                await command.RespondAsync("Pong! 🏓");
+                break;
+            case "status":
+                await HandleStatusCommandAsync(command);
+                break;
+            case "navigate":
+                await HandleNavigateCommandAsync(command);
+                break;
+            case "map":
+                await HandleMapCommandAsync(command);
+                break;
+        }
+    }
+
+    private async Task HandleStatusCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync();
+
+        try
+        {
+            var httpClient = httpClientFactory.CreateClient("BridgeApi");
+            var response = await httpClient.GetAsync("/api/status");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                await command.FollowupAsync("⚠️ Could not retrieve world status. The Bridge API may be unavailable.");
+                return;
+            }
+
+            var status = await response.Content.ReadFromJsonAsync<StatusResponse>();
+
+            var embed = new EmbedBuilder()
+                .WithTitle("🌍 World Status")
+                .WithColor(Color.Green)
+                .AddField("🏘️ Villages", status?.VillageCount.ToString() ?? "0", inline: true)
+                .AddField("🏠 Buildings", status?.BuildingCount.ToString() ?? "0", inline: true)
+                .WithFooter("Discord ↔ Minecraft Bridge")
+                .WithCurrentTimestamp()
+                .Build();
+
+            await command.FollowupAsync(embed: embed);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to execute /status command");
+            await command.FollowupAsync("⚠️ An error occurred while fetching world status.");
+        }
+    }
+
+    private async Task HandleNavigateCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync();
+
+        try
+        {
+            var channelOption = command.Data.Options.FirstOrDefault(o => o.Name == "channel");
+            if (channelOption?.Value is not IChannel targetChannel)
+            {
+                await command.FollowupAsync("⚠️ Please specify a valid channel.", ephemeral: true);
+                return;
+            }
+
+            var httpClient = httpClientFactory.CreateClient("BridgeApi");
+            var response = await httpClient.GetAsync($"/api/navigate/{targetChannel.Id}");
+
+            if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+            {
+                await command.FollowupAsync(
+                    $"📭 <#{targetChannel.Id}> has no village mapping. " +
+                    "Only public text channels within a category are mapped to Minecraft buildings.");
+                return;
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                await command.FollowupAsync("⚠️ Could not retrieve navigation data. The Bridge API may be unavailable.");
+                return;
+            }
+
+            var nav = await response.Content.ReadFromJsonAsync<NavigateResponse>();
+            if (nav is null)
+            {
+                await command.FollowupAsync("⚠️ Received an unexpected response from the Bridge API.");
+                return;
+            }
+
+            var statusLabel = nav.IsArchived ? "🔒 Archived" : "✅ Active";
+
+            var embed = new EmbedBuilder()
+                .WithTitle($"🧭 Navigation — #{nav.ChannelName}")
+                .WithColor(nav.IsArchived ? Color.DarkGrey : Color.Blue)
+                .AddField("🏘️ Village", nav.VillageName, inline: true)
+                .AddField("🏠 Building", $"#{nav.BuildingIndex}", inline: true)
+                .AddField("📍 Coordinates", $"X: {nav.CoordinateX}  Y: {nav.CoordinateY}  Z: {nav.CoordinateZ}", inline: false)
+                .AddField("🏘️ Village Center", $"X: {nav.VillageCenterX}  Z: {nav.VillageCenterZ}", inline: false)
+                .AddField("Status", statusLabel, inline: true)
+                .WithFooter("Discord ↔ Minecraft Bridge")
+                .WithCurrentTimestamp()
+                .Build();
+
+            await command.FollowupAsync(embed: embed);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to execute /navigate command");
+            await command.FollowupAsync("⚠️ An error occurred while fetching navigation data.");
+        }
+    }
+
+    private record StatusResponse(int VillageCount, int BuildingCount);
+
+    private record NavigateResponse(
+        string ChannelName,
+        string VillageName,
+        int BuildingIndex,
+        int CoordinateX,
+        int CoordinateY,
+        int CoordinateZ,
+        bool IsArchived,
+        int VillageCenterX,
+        int VillageCenterZ);
+
+    private async Task HandleMapCommandAsync(SocketSlashCommand command)
+    {
+        var blueMapBaseUrl = configuration["BlueMap:BaseUrl"] ?? "http://localhost:8200";
+
+        var channelOption = command.Data.Options.FirstOrDefault(o => o.Name == "channel");
+        if (channelOption?.Value is IChannel targetChannel)
+        {
+            // Deep-link to a specific building marker using the channel ID
+            var deepLinkUrl = $"{blueMapBaseUrl}#discord-buildings:{targetChannel.Id}";
+            await command.RespondAsync(
+                $"🗺️ **BlueMap** — Building for #{targetChannel.Name}:\n{deepLinkUrl}");
+        }
+        else
+        {
+            await command.RespondAsync(
+                $"🗺️ **BlueMap** — Interactive world map:\n{blueMapBaseUrl}");
         }
     }
 

@@ -14,6 +14,7 @@ public sealed class WorldGenJobProcessor(
     IServiceScopeFactory scopeFactory,
     IVillageGenerator villageGenerator,
     IBuildingGenerator buildingGenerator,
+    ITrackGenerator trackGenerator,
     ILogger<WorldGenJobProcessor> logger) : BackgroundService
 {
     private static readonly JsonSerializerOptions PayloadOptions = new(JsonSerializerDefaults.Web);
@@ -147,6 +148,22 @@ public sealed class WorldGenJobProcessor(
 
             case WorldGenJobType.UpdateBuilding:
                 logger.LogWarning("UpdateBuilding not yet implemented (Sprint 3 scope), JobId={JobId}", job.JobId);
+                break;
+
+            case WorldGenJobType.CreateTrack:
+                var trackPayload = JsonSerializer.Deserialize<TrackJobPayload>(job.Payload, PayloadOptions)
+                    ?? throw new InvalidOperationException("Failed to deserialize TrackJobPayload");
+                var trackRequest = new TrackGenerationRequest(
+                    JobId: job.JobId,
+                    SourceChannelGroupId: trackPayload.SourceChannelGroupId,
+                    DestinationChannelGroupId: trackPayload.DestinationChannelGroupId,
+                    SourceVillageName: trackPayload.SourceVillageName,
+                    DestinationVillageName: trackPayload.DestinationVillageName,
+                    SourceCenterX: trackPayload.SourceCenterX,
+                    SourceCenterZ: trackPayload.SourceCenterZ,
+                    DestCenterX: trackPayload.DestCenterX,
+                    DestCenterZ: trackPayload.DestCenterZ);
+                await trackGenerator.GenerateAsync(trackRequest, ct);
                 break;
 
             default:

@@ -1,0 +1,9 @@
+# Discord Bridge Plugin Configuration
+
+# HTTP API port for receiving commands from .NET services
+http-port: 8180
+
+# Redis connection settings
+redis:
+  host: "localhost"
+  port: 6379

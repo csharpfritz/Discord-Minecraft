@@ -14,6 +14,10 @@ builder.Services.AddSingleton(new DiscordSocketConfig
 });
 
 builder.Services.AddSingleton<DiscordSocketClient>();
+builder.Services.AddHttpClient("BridgeApi", client =>
+{
+    client.BaseAddress = new Uri("https+http://bridge-api");
+});
 builder.Services.AddHostedService<DiscordBotWorker>();
 
 var host = builder.Build();

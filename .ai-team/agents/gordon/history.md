@@ -44,3 +44,11 @@
 - Squad badges use shields.io flat-square format: `https://img.shields.io/badge/{emoji}_{name}-{role}-{hex}?style=flat-square&labelColor={hex}&color={hex}`
 
  Team update (2026-02-12): README.md created with project overview, architecture, getting started, and squad roster with shields.io badges  decided by Gordon
+- BlueMap integration added as S3-08 (Issue #10) in Sprint 3 milestone. BlueMap JAR in plugins dir, web server on port 8100 via Aspire port mapping, markers via BlueMap Java API from Bridge Plugin, `/map` Discord command. Assigned to Oracle (squad:oracle).
+📌 Team update (2026-02-12): BlueMap architecture — drop-in Paper plugin, Aspire port mapping, Java API markers, deterministic `/map` URL — decided by Gordon
+
+📌 Team update (2026-02-12): Minecart track layout — L-shaped paths at y=65, stations 30 blocks south of village center, angle-based platform slots — decided by Batgirl
+📌 Team update (2026-02-12): Channel deletion now enqueues ArchiveBuilding/ArchiveVillage jobs to Redis worldgen queue — decided by Lucius
+📌 Team update (2026-02-12): Sprint 3 test specs written for all features — decided by Nightwing
+📌 Team update (2026-02-12): Paper Bridge Plugin uses JDK HttpServer + Jedis + Bukkit scheduler, player events on events:minecraft:player — decided by Oracle
+📌 Team update (2026-02-12): Port reassignment — decided by Lucius, requested by Jeff

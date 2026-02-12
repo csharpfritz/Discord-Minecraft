@@ -46,3 +46,9 @@
 - Channel deletion behavior: `IsArchived` flag set on Channel/ChannelGroup, record NOT removed from DB; sync endpoint does NOT clear `IsArchived` on upsert (archived channels stay archived)
 - `BuildingX`/`BuildingZ` are null until WorldGen Worker processes the job — deletion of pre-generation channels is safe (archive flag set, null coords preserved)
 - Current event consumer does NOT enqueue archive/UpdateBuilding jobs on channel deletion — it only sets `IsArchived`. Sprint 3 S3-05 implementation should add job enqueueing for sign updates and barrier placement
+
+📌 Team update (2026-02-12): Minecart track layout — L-shaped paths at y=65, stations 30 blocks south of village center, angle-based platform slots — decided by Batgirl
+📌 Team update (2026-02-12): Channel deletion now enqueues ArchiveBuilding/ArchiveVillage jobs to Redis worldgen queue — BuildingArchiver updates signs + blocks entrances — decided by Lucius
+📌 Team update (2026-02-12): BlueMap integration added as S3-08 — drop-in Paper plugin, port 8100, Java API markers — decided by Gordon
+📌 Team update (2026-02-12): Paper Bridge Plugin uses JDK HttpServer + Jedis + Bukkit scheduler, player events on events:minecraft:player — decided by Oracle
+📌 Team update (2026-02-12): Port reassignment — decided by Lucius, requested by Jeff

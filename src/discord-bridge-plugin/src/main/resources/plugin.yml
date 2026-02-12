@@ -1,0 +1,6 @@
+name: DiscordBridge
+version: '${version}'
+main: com.discordminecraft.bridge.BridgePlugin
+api-version: '1.21'
+description: Bridge plugin for Discord-Minecraft integration. Exposes HTTP API and publishes player events to Redis.
+author: Oracle
