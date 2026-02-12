@@ -14,6 +14,7 @@ public sealed class WorldGenJobProcessor(
     IServiceScopeFactory scopeFactory,
     IVillageGenerator villageGenerator,
     IBuildingGenerator buildingGenerator,
+    ITrackGenerator trackGenerator,
     ILogger<WorldGenJobProcessor> logger) : BackgroundService
 {
     private static readonly JsonSerializerOptions PayloadOptions = new(JsonSerializerDefaults.Web);
@@ -85,6 +86,12 @@ public sealed class WorldGenJobProcessor(
             await dbContext.SaveChangesAsync(ct);
 
             logger.LogInformation("Job {JobId} completed successfully", job.JobId);
+
+            // After village creation completes, enqueue track jobs to all existing villages
+            if (job.JobType == WorldGenJobType.CreateVillage)
+            {
+                await EnqueueTrackJobsForNewVillageAsync(job, dbContext, db, ct);
+            }
         }
         catch (Exception ex)
         {
@@ -149,8 +156,88 @@ public sealed class WorldGenJobProcessor(
                 logger.LogWarning("UpdateBuilding not yet implemented (Sprint 3 scope), JobId={JobId}", job.JobId);
                 break;
 
+            case WorldGenJobType.CreateTrack:
+                var trackPayload = JsonSerializer.Deserialize<TrackJobPayload>(job.Payload, PayloadOptions)
+                    ?? throw new InvalidOperationException("Failed to deserialize TrackJobPayload");
+                var trackRequest = new TrackGenerationRequest(
+                    JobId: job.JobId,
+                    SourceChannelGroupId: trackPayload.SourceChannelGroupId,
+                    DestinationChannelGroupId: trackPayload.DestinationChannelGroupId,
+                    SourceVillageName: trackPayload.SourceVillageName,
+                    DestinationVillageName: trackPayload.DestinationVillageName,
+                    SourceCenterX: trackPayload.SourceCenterX,
+                    SourceCenterZ: trackPayload.SourceCenterZ,
+                    DestCenterX: trackPayload.DestCenterX,
+                    DestCenterZ: trackPayload.DestCenterZ);
+                await trackGenerator.GenerateAsync(trackRequest, ct);
+                break;
+
             default:
                 throw new InvalidOperationException($"Unknown job type: {job.JobType}");
+        }
+    }
+
+    /// <summary>
+    /// After a village is fully built, enqueue CreateTrack jobs connecting it to every other
+    /// non-archived village. The first village gets no tracks (no destinations yet).
+    /// </summary>
+    private async Task EnqueueTrackJobsForNewVillageAsync(
+        WorldGenJob completedJob, BridgeDbContext dbContext, IDatabase redisDb, CancellationToken ct)
+    {
+        var villagePayload = JsonSerializer.Deserialize<VillageJobPayload>(completedJob.Payload, PayloadOptions)
+            ?? throw new InvalidOperationException("Failed to deserialize VillageJobPayload for track routing");
+
+        var newGroupId = villagePayload.ChannelGroupId;
+
+        // Find all other non-archived villages
+        var existingVillages = await dbContext.ChannelGroups
+            .Where(g => g.Id != newGroupId && !g.IsArchived)
+            .ToListAsync(ct);
+
+        if (existingVillages.Count == 0)
+        {
+            logger.LogInformation(
+                "Village '{Name}' is the first village \u2014 no track connections needed",
+                villagePayload.VillageName);
+            return;
+        }
+
+        logger.LogInformation(
+            "Enqueuing {Count} track job(s) connecting '{Name}' to existing villages",
+            existingVillages.Count, villagePayload.VillageName);
+
+        foreach (var existing in existingVillages)
+        {
+            var trackPayload = new TrackJobPayload(
+                SourceChannelGroupId: newGroupId,
+                DestinationChannelGroupId: existing.Id,
+                SourceVillageName: villagePayload.VillageName,
+                DestinationVillageName: existing.Name,
+                SourceCenterX: villagePayload.CenterX,
+                SourceCenterZ: villagePayload.CenterZ,
+                DestCenterX: existing.CenterX,
+                DestCenterZ: existing.CenterZ);
+
+            var genJob = new GenerationJob
+            {
+                Type = WorldGenJobType.CreateTrack.ToString(),
+                Payload = JsonSerializer.Serialize(trackPayload, PayloadOptions),
+                Status = GenerationJobStatus.Pending
+            };
+            dbContext.GenerationJobs.Add(genJob);
+            await dbContext.SaveChangesAsync(ct);
+
+            var worldGenJob = new WorldGenJob
+            {
+                JobType = WorldGenJobType.CreateTrack,
+                JobId = genJob.Id,
+                Payload = JsonSerializer.Serialize(trackPayload, PayloadOptions)
+            };
+            await redisDb.ListLeftPushAsync(RedisQueues.WorldGen, worldGenJob.ToJson());
+
+            logger.LogInformation(
+                "Enqueued CreateTrack job {JobId}: '{Source}' \u2194 '{Dest}'",
+                genJob.Id, villagePayload.VillageName, existing.Name);
         }
     }
 
@@ -163,7 +250,7 @@ public sealed class WorldGenJobProcessor(
         }
         catch (OperationCanceledException)
         {
-            // Shutting down — job stays as Pending in DB for reconciliation on next startup
+            // Shutting down \u2014 job stays as Pending in DB for reconciliation on next startup
         }
     }
 }

@@ -35,6 +35,7 @@ public final class BridgePlugin extends JavaPlugin {
         blueMapIntegration.enable();
         getLogger().info("BlueMap integration initialized");
 
+
         // Register player event listener
         getServer().getPluginManager().registerEvents(
                 new PlayerEventListener(this, redisPublisher), this);
@@ -63,6 +64,7 @@ public final class BridgePlugin extends JavaPlugin {
             getLogger().info("BlueMap integration disabled");
         }
 
+
         if (redisPublisher != null) {
             redisPublisher.close();
             getLogger().info("Redis connection closed");
@@ -70,7 +72,6 @@ public final class BridgePlugin extends JavaPlugin {
 
         getLogger().info("DiscordBridge plugin disabled");
     }
-
     public BlueMapIntegration getBlueMapIntegration() {
         return blueMapIntegration;
     }

@@ -79,7 +79,7 @@ public sealed class DiscordEventConsumer(
                 break;
 
             case DiscordChannelEventType.ChannelGroupDeleted:
-                await HandleChannelGroupDeletedAsync(evt, db);
+                await HandleChannelGroupDeletedAsync(evt, db, redisDb);
                 break;
 
             case DiscordChannelEventType.ChannelCreated:
@@ -87,7 +87,7 @@ public sealed class DiscordEventConsumer(
                 break;
 
             case DiscordChannelEventType.ChannelDeleted:
-                await HandleChannelDeletedAsync(evt, db);
+                await HandleChannelDeletedAsync(evt, db, redisDb);
                 break;
 
             case DiscordChannelEventType.ChannelUpdated:
@@ -158,7 +158,8 @@ public sealed class DiscordEventConsumer(
             job.Id, group.Name);
     }
 
-    private async Task HandleChannelGroupDeletedAsync(DiscordChannelEvent evt, BridgeDbContext db)
+    private async Task HandleChannelGroupDeletedAsync(
+        DiscordChannelEvent evt, BridgeDbContext db, IDatabase redisDb)
     {
         var discordId = evt.ChannelGroupId ?? evt.ChannelId!;
         var group = await db.ChannelGroups
@@ -179,8 +180,34 @@ public sealed class DiscordEventConsumer(
 
         await db.SaveChangesAsync();
 
-        logger.LogInformation("Archived channel group {GroupName} and {Count} channels",
-            group.Name, group.Channels.Count);
+        // Enqueue ArchiveVillage job with all building info
+        var buildings = group.Channels
+            .Select(c => new ArchiveBuildingJobPayload(
+                group.Id, c.Id, c.BuildingIndex, group.CenterX, group.CenterZ, c.Name))
+            .ToList();
+
+        var payload = new ArchiveVillageJobPayload(
+            group.Id, group.CenterX, group.CenterZ, group.Name, buildings);
+
+        var job = new GenerationJob
+        {
+            Type = WorldGenJobType.ArchiveVillage.ToString(),
+            Payload = JsonSerializer.Serialize(payload, JsonOptions),
+            Status = GenerationJobStatus.Pending
+        };
+        db.GenerationJobs.Add(job);
+        await db.SaveChangesAsync();
+
+        var worldGenJob = new WorldGenJob
+        {
+            JobType = WorldGenJobType.ArchiveVillage,
+            JobId = job.Id,
+            Payload = JsonSerializer.Serialize(payload, JsonOptions)
+        };
+        await redisDb.ListLeftPushAsync(RedisQueues.WorldGen, worldGenJob.ToJson());
+
+        logger.LogInformation("Archived channel group {GroupName} and {Count} channels, enqueued ArchiveVillage job {JobId}",
+            group.Name, group.Channels.Count, job.Id);
     }
 
     private async Task HandleChannelCreatedAsync(
@@ -266,10 +293,13 @@ public sealed class DiscordEventConsumer(
             job.Id, channel.Name);
     }
 
-    private async Task HandleChannelDeletedAsync(DiscordChannelEvent evt, BridgeDbContext db)
+    private async Task HandleChannelDeletedAsync(
+        DiscordChannelEvent evt, BridgeDbContext db, IDatabase redisDb)
     {
         var channelDiscordId = evt.ChannelId!;
-        var channel = await db.Channels.FirstOrDefaultAsync(c => c.DiscordId == channelDiscordId);
+        var channel = await db.Channels
+            .Include(c => c.ChannelGroup)
+            .FirstOrDefaultAsync(c => c.DiscordId == channelDiscordId);
 
         if (channel is null)
         {
@@ -280,7 +310,31 @@ public sealed class DiscordEventConsumer(
         channel.IsArchived = true;
         await db.SaveChangesAsync();
 
-        logger.LogInformation("Archived channel {ChannelName}", channel.Name);
+        // Enqueue ArchiveBuilding job
+        var group = channel.ChannelGroup;
+        var payload = new ArchiveBuildingJobPayload(
+            group.Id, channel.Id, channel.BuildingIndex,
+            group.CenterX, group.CenterZ, channel.Name);
+
+        var job = new GenerationJob
+        {
+            Type = WorldGenJobType.ArchiveBuilding.ToString(),
+            Payload = JsonSerializer.Serialize(payload, JsonOptions),
+            Status = GenerationJobStatus.Pending
+        };
+        db.GenerationJobs.Add(job);
+        await db.SaveChangesAsync();
+
+        var worldGenJob = new WorldGenJob
+        {
+            JobType = WorldGenJobType.ArchiveBuilding,
+            JobId = job.Id,
+            Payload = JsonSerializer.Serialize(payload, JsonOptions)
+        };
+        await redisDb.ListLeftPushAsync(RedisQueues.WorldGen, worldGenJob.ToJson());
+
+        logger.LogInformation("Archived channel {ChannelName}, enqueued ArchiveBuilding job {JobId}",
+            channel.Name, job.Id);
     }
 
     private async Task HandleChannelUpdatedAsync(

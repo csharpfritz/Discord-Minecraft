@@ -144,6 +144,43 @@ app.MapGet("/api/villages/{id}/buildings", async (int id, BridgeDbContext db) =>
     return Results.Ok(buildings);
 });
 
+// GET /api/status — World stats (village count, building count)
+app.MapGet("/api/status", async (BridgeDbContext db) =>
+{
+    var villageCount = await db.ChannelGroups.CountAsync(g => !g.IsArchived);
+    var buildingCount = await db.Channels.CountAsync(c => !c.IsArchived);
+
+    return Results.Ok(new
+    {
+        villageCount,
+        buildingCount
+    });
+});
+
+// GET /api/navigate/{discordChannelId} — Get village/building info for a channel
+app.MapGet("/api/navigate/{discordChannelId}", async (string discordChannelId, BridgeDbContext db) =>
+{
+    var channel = await db.Channels
+        .Include(c => c.ChannelGroup)
+        .FirstOrDefaultAsync(c => c.DiscordId == discordChannelId);
+
+    if (channel is null)
+        return Results.NotFound(new { message = "No mapping found for this channel." });
+
+    return Results.Ok(new
+    {
+        channelName = channel.Name,
+        villageName = channel.ChannelGroup.Name,
+        buildingIndex = channel.BuildingIndex,
+        coordinateX = channel.BuildingX ?? channel.CoordinateX,
+        coordinateY = WorldConstants.BaseY + 1,
+        coordinateZ = channel.BuildingZ ?? channel.CoordinateZ,
+        isArchived = channel.IsArchived,
+        villageCenterX = channel.ChannelGroup.VillageX ?? channel.ChannelGroup.CenterX,
+        villageCenterZ = channel.ChannelGroup.VillageZ ?? channel.ChannelGroup.CenterZ
+    });
+});
+
 // POST /api/players/link — Initiate account link
 app.MapPost("/api/players/link", async (LinkRequest request, IConnectionMultiplexer redis) =>
 {
