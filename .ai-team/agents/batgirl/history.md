@@ -36,6 +36,7 @@
 📌 Team update (2026-02-12): Sprint work items are now GitHub Issues with milestones and squad-colored labels — decided by Jeff and Gordon
 
  Team update (2026-02-12): README.md created with project overview, architecture, getting started, and squad roster with shields.io badges  decided by Gordon
+📌 Team update (2026-02-12): README.md created with project overview, architecture, getting started, and squad roster with shields.io badges — decided by Gordon
 
 📌 Team update (2026-02-12): Only publicly accessible Discord channels are mapped to Minecraft village buildings — private/restricted channels excluded — decided by Jeffrey T. Fritz
 
@@ -51,3 +52,6 @@
 📌 Team update (2026-02-12): BlueMap integration added as S3-08 — drop-in Paper plugin, port 8100, Java API markers, /map Discord command — decided by Gordon
 📌 Team update (2026-02-12): Paper Bridge Plugin uses JDK HttpServer + Jedis + Bukkit scheduler, player events on events:minecraft:player — decided by Oracle
 📌 Team update (2026-02-12): Port reassignment — decided by Lucius, requested by Jeff
+📌 S3-04 complete (2026-02-12): Track routing on village creation — WorldGenJobProcessor now enqueues CreateTrack jobs for every existing non-archived village after a CreateVillage job completes successfully. First village is handled gracefully (no tracks needed, logged informatively). Track jobs are queued AFTER village generation completes, ensuring the village is fully built before track generation begins. Station signs at existing villages are updated automatically because each CreateTrack job generates new station platforms with destination signs at both ends via the existing TrackGenerator.
+📌 Learning (2026-02-12): Track routing is a follow-up concern of the job processor, not the event consumer — enqueue CreateTrack jobs after CreateVillage succeeds to guarantee correct ordering
+📌 Learning (2026-02-12): Existing station sign updates happen naturally through new platform creation — each TrackGenerator.GenerateAsync call builds platforms with signs at both the source and destination village, so connecting a new village automatically adds signs at existing ones
