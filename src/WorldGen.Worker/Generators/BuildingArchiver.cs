@@ -10,7 +10,7 @@ namespace WorldGen.Worker.Generators;
 /// </summary>
 public sealed class BuildingArchiver(RconService rcon, ILogger<BuildingArchiver> logger) : IBuildingArchiver
 {
-    private const int BaseY = 64;
+    private const int BaseY = -60; // Superflat world surface level
     private const int Footprint = 21;
     private const int HalfFootprint = Footprint / 2; // 10
     private const int Floors = 4;

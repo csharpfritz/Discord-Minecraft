@@ -6,13 +6,13 @@ namespace WorldGen.Worker.Generators;
 
 public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerator> logger) : IBuildingGenerator
 {
-    private const int BaseY = 64;
+    private const int BaseY = -60; // Superflat world surface level
     private const int Footprint = 21;
     private const int HalfFootprint = Footprint / 2; // 10
     private const int Floors = 4;
     private const int FloorHeight = 5; // floor-to-ceiling per story
-    private const int WallTop = BaseY + Floors * FloorHeight; // y=84
-    private const int RoofY = WallTop + 1; // y=85
+    private const int WallTop = BaseY + Floors * FloorHeight; // y=-40
+    private const int RoofY = WallTop + 1; // y=-39
 
     // Carpet colors per floor (different color each floor)
     private static readonly string[] CarpetColors =

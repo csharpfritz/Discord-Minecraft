@@ -6,7 +6,7 @@ namespace WorldGen.Worker.Generators;
 
 public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator> logger) : IVillageGenerator
 {
-    private const int BaseY = 64;
+    private const int BaseY = -60; // Superflat world surface level
     private const int PlazaRadius = 15; // 31x31 platform = radius 15 from center
     private const int WallHeight = 3;
     private const int LightSpacing = 4;

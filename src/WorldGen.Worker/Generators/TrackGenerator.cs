@@ -11,8 +11,8 @@ namespace WorldGen.Worker.Generators;
 /// </summary>
 public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> logger) : ITrackGenerator
 {
-    private const int TrackY = 65; // elevated trackbed
-    private const int TrackbedY = 64; // support block under tracks
+    private const int TrackY = -59; // elevated trackbed (superflat surface + 1)
+    private const int TrackbedY = -60; // support block under tracks (superflat surface)
     private const int PoweredRailInterval = 8;
     private const int StationOffset = 30; // station distance south of village center
 
