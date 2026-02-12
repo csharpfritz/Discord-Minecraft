@@ -246,7 +246,7 @@ public class DiscordBotWorker(
 
     private async Task HandleMapCommandAsync(SocketSlashCommand command)
     {
-        var blueMapBaseUrl = configuration["BlueMap:BaseUrl"] ?? "http://localhost:8100";
+        var blueMapBaseUrl = configuration["BlueMap:BaseUrl"] ?? "http://localhost:8200";
 
         var channelOption = command.Data.Options.FirstOrDefault(o => o.Name == "channel");
         if (channelOption?.Value is IChannel targetChannel)
