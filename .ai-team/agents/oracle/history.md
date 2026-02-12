@@ -63,3 +63,12 @@
 - **Gradle build** copies output JAR to `src/AppHost/minecraft-data/plugins/` via `tasks.jar { doLast { ... } }`.
 - **Thread safety pattern:** All Bukkit API calls in HTTP handlers dispatched to main thread via `Bukkit.getScheduler().runTask()`. Redis publishes dispatched async via `runTaskAsynchronously()`.
 - **Concurrent git environment:** When multiple agents share a working directory, use git plumbing (`read-tree`, `write-tree`, `commit-tree`, `update-ref`) with `GIT_INDEX_FILE` to avoid branch-switching races.
+
+- **BlueMap integration (S3-08)** added to Bridge Plugin on branch `squad/10-bluemap`. BlueMapAPI 2.7.2 as `compileOnly` dependency (BlueMap JAR provides the classes at runtime). Maven repo: `https://repo.bluecolored.de/releases`.
+- **BlueMapIntegration class** manages two marker sets: `discord-villages` and `discord-buildings`. Uses `BlueMapAPI.onEnable`/`onDisable` lifecycle hooks. Markers cached in `ConcurrentHashMap` and restored on API reload. Only overworld maps receive markers (filters out nether/end).
+- **Marker HTTP endpoints** added to Bridge Plugin's `HttpApiServer`: `POST /api/markers/village`, `POST /api/markers/building`, `POST /api/markers/building/archive`, `POST /api/markers/village/archive`. Body schema: `{ "id", "label", "x", "z" }` for create; `{ "id" }` for archive.
+- **BlueMap port mapping** — port 8100 exposed on the Paper MC container via Aspire's `.WithEndpoint(targetPort: 8100, port: 8100, name: "bluemap", scheme: "http")`. HTTP scheme (not TCP) because BlueMap serves a web UI.
+- **BlueMap base URL wiring** — `BlueMap__BaseUrl` env var passed to Discord bot via `.WithEnvironment("BlueMap__BaseUrl", minecraft.GetEndpoint("bluemap"))`. Discord bot reads it as `configuration["BlueMap:BaseUrl"]` with fallback to `http://localhost:8100`.
+- **BlueMap config files** version-controlled at `src/AppHost/minecraft-data/plugins/BlueMap/core.conf` and `webserver.conf`. Key settings: `accept-download: true`, `ip: "0.0.0.0"` (required for Docker port mapping), `port: 8100`.
+- **`plugin.yml` softdepend** — BlueMap declared as `softdepend` so the plugin loads after BlueMap but doesn't fail if BlueMap is absent. The `BlueMapIntegration.isAvailable()` check gates marker operations.
+- **`/map` slash command** already existed in the codebase from S3-06 work — reads `BlueMap:BaseUrl` from config, supports optional `channel` parameter for deep-linking to building markers via `#discord-buildings:{channelId}` hash fragment.
