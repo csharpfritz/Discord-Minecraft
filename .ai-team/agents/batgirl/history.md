@@ -50,3 +50,4 @@
 📌 Team update (2026-02-12): Sprint 3 test specs written for all features including 14 channel deletion + 8 E2E smoke tests — decided by Nightwing
 📌 Team update (2026-02-12): BlueMap integration added as S3-08 — drop-in Paper plugin, port 8100, Java API markers, /map Discord command — decided by Gordon
 📌 Team update (2026-02-12): Paper Bridge Plugin uses JDK HttpServer + Jedis + Bukkit scheduler, player events on events:minecraft:player — decided by Oracle
+📌 Team update (2026-02-12): Port reassignment — decided by Lucius, requested by Jeff

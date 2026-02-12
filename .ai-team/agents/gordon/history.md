@@ -51,3 +51,4 @@
 📌 Team update (2026-02-12): Channel deletion now enqueues ArchiveBuilding/ArchiveVillage jobs to Redis worldgen queue — decided by Lucius
 📌 Team update (2026-02-12): Sprint 3 test specs written for all features — decided by Nightwing
 📌 Team update (2026-02-12): Paper Bridge Plugin uses JDK HttpServer + Jedis + Bukkit scheduler, player events on events:minecraft:player — decided by Oracle
+📌 Team update (2026-02-12): Port reassignment — decided by Lucius, requested by Jeff

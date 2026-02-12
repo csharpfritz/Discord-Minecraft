@@ -68,3 +68,4 @@
 📌 Team update (2026-02-12): Channel deletion now enqueues ArchiveBuilding/ArchiveVillage jobs to Redis worldgen queue — BuildingArchiver updates signs + blocks entrances — decided by Lucius
 📌 Team update (2026-02-12): BlueMap integration added as S3-08 — drop-in Paper plugin, port 8100 via Aspire, Java API markers, /map Discord command (Oracle owns) — decided by Gordon
 📌 Team update (2026-02-12): Sprint 3 test specs written — 14 channel deletion + 8 E2E smoke tests, reusing BridgeApiFactory — decided by Nightwing
+📌 Team update (2026-02-12): Port reassignment — decided by Lucius, requested by Jeff

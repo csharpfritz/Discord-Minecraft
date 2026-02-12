@@ -170,3 +170,14 @@
 **By:** Oracle
 **What:** Player join/leave events are published to Redis channel `events:minecraft:player` with schema `{ eventType: "PlayerJoined"|"PlayerLeft", playerUuid, playerName, timestamp }`. The channel name is registered in both Java (`RedisPublisher.CHANNEL_PLAYER_EVENT`) and .NET (`RedisChannels.MinecraftPlayer`). A corresponding `MinecraftPlayerEvent` DTO was added to `Bridge.Data/Events/` for .NET-side deserialization.
 **Why:** Follows the established pattern from Sprint 2 — channel name constants shared between producers and consumers, matching DTO records on both sides. The `events:minecraft:*` namespace was already reserved in the architecture doc. camelCase JSON matches the existing `DiscordChannelEvent` serialization convention.
+
+### 2026-02-12: Port reassignment for multi-project coexistence
+**By:** Jeffrey T. Fritz (directive), Lucius (implementation)
+**What:** Jeff requested distinct ports so this project can run alongside other Minecraft projects on the same machine. Lucius reassigned all service ports using a +100 offset convention:
+- Minecraft game: 25565 → 25665
+- Minecraft RCON: 25575 → 25675
+- BlueMap web server: 8100 → 8200
+- Plugin HTTP API: 8080 → 8180
+
+Changes applied across branches: `main`, `squad/10-bluemap`, `squad/1-paper-bridge-plugin`, `squad/6-discord-slash-commands`. Files updated: `AppHost.cs`, `server.properties`, `webserver.conf`, `config.yml`, `DiscordBotWorker.cs`.
+**Why:** Jeff runs multiple Minecraft integration projects simultaneously. Default ports would conflict. The +100 offset keeps ports recognizable while avoiding collisions.
