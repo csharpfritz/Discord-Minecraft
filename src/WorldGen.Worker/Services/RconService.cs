@@ -39,11 +39,12 @@ public sealed class RconService : IAsyncDisposable
             return _rcon;
 
         var addresses = await Dns.GetHostAddressesAsync(_host);
-        if (addresses.Length == 0)
-            throw new InvalidOperationException($"Could not resolve RCON host: {_host}");
+        // CoreRCON uses IPv4 sockets — filter out IPv6 to avoid NotSupportedException
+        var ipv4 = addresses.FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+            ?? IPAddress.Loopback;
 
-        _logger.LogInformation("Connecting to RCON at {Host}:{Port} (resolved: {Address})", _host, _port, addresses[0]);
-        var rcon = new RCON(addresses[0], _port, _password);
+        _logger.LogInformation("Connecting to RCON at {Host}:{Port} (resolved: {Address})", _host, _port, ipv4);
+        var rcon = new RCON(ipv4, _port, _password);
         await rcon.ConnectAsync();
 
         // Verify the connection is alive with a lightweight command
