@@ -119,6 +119,14 @@
 
 - Channel/category deletion now enqueues `ArchiveBuilding`/`ArchiveVillage` jobs to the Redis `queue:worldgen` in addition to setting `IsArchived=true` in PostgreSQL
 - `BuildingArchiver` in WorldGen.Worker handles in-world archival: updates all signs (entrance + floor) with red `[Archived]` prefix, blocks 3×3 entrance with `minecraft:barrier` blocks
+- `ArchiveVillage` job iterates all buildings in the group and archives each one via the same `BuildingArchiver` — no separate village-level RCON logic needed
+- Building coordinate recalculation uses the same ring formula as `BuildingGenerator`: `60 * cos/sin(index * 22.5°)` from village center
+- Sign text truncated to 10 chars (vs 15 in original) to leave room for `[Archived]` prefix on the first line
+- Job payload DTOs: `ArchiveBuildingJobPayload` and `ArchiveVillageJobPayload` in `Bridge.Data/Jobs/`
+- `IBuildingArchiver` interface + `BuildingArchiver` implementation in `WorldGen.Worker/Generators/`
+- `BuildingArchiveRequest` model in `WorldGen.Worker/Models/`
+- `DiscordEventConsumer.HandleChannelDeletedAsync` now includes `ChannelGroup` via `.Include()` to get village center coords for the archive job
+- `DiscordEventConsumer.HandleChannelGroupDeletedAsync` now builds a list of `ArchiveBuildingJobPayload` for all channels and wraps them in an `ArchiveVillageJobPayload`
 - `ArchiveVillage` job iterates all buildings in the group and archives each one via `BuildingArchiver`
 - Building coordinate recalculation uses the same ring formula as `BuildingGenerator`: `60 * cos/sin(index * 22.5°)` from village center
 - Sign text truncated to 10 chars (vs 15 in original) to leave room for `[Archived]` prefix on first line
