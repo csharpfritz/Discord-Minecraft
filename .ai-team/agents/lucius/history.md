@@ -97,3 +97,21 @@
  Team update (2026-02-12): README.md created with project overview, architecture, getting started, and squad roster with shields.io badges  decided by Gordon
 
 📌 Team update (2026-02-12): Only publicly accessible Discord channels are mapped to Minecraft village buildings — private/restricted channels excluded — decided by Jeffrey T. Fritz
+
+### Sprint 3 — S3-05: Channel Deletion Handling
+
+- Channel/category deletion now enqueues `ArchiveBuilding`/`ArchiveVillage` jobs to the Redis `queue:worldgen` in addition to setting `IsArchived=true` in PostgreSQL
+- `BuildingArchiver` in WorldGen.Worker handles in-world archival: updates all signs (entrance + floor) with red `[Archived]` prefix, blocks 3×3 entrance with `minecraft:barrier` blocks
+- `ArchiveVillage` job iterates all buildings in the group and archives each one via the same `BuildingArchiver` — no separate village-level RCON logic needed
+- Building coordinate recalculation uses the same ring formula as `BuildingGenerator`: `60 * cos/sin(index * 22.5°)` from village center
+- Sign text truncated to 10 chars (vs 15 in original) to leave room for `[Archived]` prefix on the first line
+- Job payload DTOs: `ArchiveBuildingJobPayload` and `ArchiveVillageJobPayload` in `Bridge.Data/Jobs/`
+- `IBuildingArchiver` interface + `BuildingArchiver` implementation in `WorldGen.Worker/Generators/`
+- `BuildingArchiveRequest` model in `WorldGen.Worker/Models/`
+- `DiscordEventConsumer.HandleChannelDeletedAsync` now includes `ChannelGroup` via `.Include()` to get village center coords for the archive job
+- `DiscordEventConsumer.HandleChannelGroupDeletedAsync` now builds a list of `ArchiveBuildingJobPayload` for all channels and wraps them in an `ArchiveVillageJobPayload`
+
+📌 Team update (2026-02-12): Minecart track layout — L-shaped paths at y=65, stations 30 blocks south of village center, angle-based platform slots — decided by Batgirl
+📌 Team update (2026-02-12): BlueMap integration added as S3-08 — drop-in Paper plugin, port 8100 via Aspire, Java API markers — decided by Gordon
+📌 Team update (2026-02-12): Sprint 3 test specs written — 14 channel deletion + 8 E2E smoke tests, reusing BridgeApiFactory — decided by Nightwing
+📌 Team update (2026-02-12): Paper Bridge Plugin uses JDK HttpServer + Jedis + Bukkit scheduler, player events on events:minecraft:player — decided by Oracle

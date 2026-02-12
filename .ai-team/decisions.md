@@ -129,3 +129,44 @@
 **By:** Jeffrey T. Fritz (via Copilot)
 **What:** Only create village buildings for publicly accessible channels in the Discord server. Private channels, restricted channels, and channels not visible to @everyone should be excluded from the channel-to-village mapping.
 **Why:** User request — ensures the Minecraft world only reflects the public structure of the Discord server.
+
+### 2026-02-12: Minecart track spatial layout and station design
+**By:** Batgirl
+**What:** Track system uses L-shaped paths (X-first, then Z) at y=65 with stone brick trackbed at y=64. Stations placed 30 blocks south of village center (inside building ring at radius 60, outside plaza at radius 15). Platform slots are angle-deterministic using Atan2 — each destination gets a unique slot offset so platforms don't overlap. Powered rails every 8 blocks with redstone blocks underneath. Button-activated dispensers with 64 minecarts per platform.
+**Why:** L-shaped paths are the only option since Minecraft rails don't support diagonals. Station offset of 30 was chosen to be clearly outside the plaza perimeter wall (radius 15) but well inside the building ring (radius 60), keeping stations visually connected to the village without colliding with buildings. Angle-based slot assignment is deterministic and stable — adding new villages doesn't shift existing platforms. Redstone blocks under powered rails provide permanent activation without complex circuitry.
+
+### 2026-02-12: User directive — Add BlueMap integration for interactive web map
+**By:** Jeffrey T. Fritz (via Copilot)
+**What:** Add BlueMap to the Minecraft server so Discord users can browse an interactive web map showing their channels and channel groups allocated in the Minecraft world. The map should be accessible from Discord.
+**Why:** User request — provides visual discovery of the Discord-to-Minecraft world mapping without requiring players to join the server.
+
+### 2026-02-12: BlueMap integration architecture for interactive web map
+**By:** Gordon
+**What:** BlueMap (Paper plugin) added to Sprint 3 as S3-08 (Issue #10). Architecture decisions:
+1. **Deployment** — BlueMap JAR installed in the same Aspire-mounted `plugins/` directory as the Bridge Plugin. No separate container; it runs inside the Paper MC server process.
+2. **Port exposure** — BlueMap's built-in web server (port 8100) exposed through Aspire container port mapping on the Paper MC container, same pattern as RCON (25575) and MC (25565).
+3. **Marker integration** — Bridge Plugin uses BlueMap's Java API (same JVM, direct API calls) to create/update marker sets for villages and building markers for channels. No HTTP round-trips needed.
+4. **Marker lifecycle** — Markers created on village/building generation, updated on archive (visual change or removal). Bridge Plugin already handles these events via its HTTP API from .NET services.
+5. **Discord `/map` command** — Returns a deterministic URL (Aspire host + BlueMap port). Optional channel argument deep-links to a building marker. Added to S3-06 scope (Oracle).
+6. **Ownership** — Oracle owns this item (squad:oracle label) since it spans Paper plugin integration and Discord bot commands.
+**Why:** BlueMap is the lightest integration path — it's a drop-in Paper plugin that auto-renders the world and exposes a marker API. No separate rendering service, no additional database, no custom web frontend. The superflat world renders cleanly. Markers via the Java API avoid a secondary HTTP integration layer. Port mapping through Aspire keeps the web server discoverable without manual Docker config.
+
+### 2026-02-12: Channel deletion archives buildings via WorldGen job queue
+**By:** Lucius (implementation), Nightwing (gap identification)
+**What:** Channel and category deletion events now enqueue `ArchiveBuilding` and `ArchiveVillage` jobs to the Redis worldgen queue, rather than only marking `IsArchived=true` in PostgreSQL. The WorldGen Worker processes these jobs via a new `BuildingArchiver` that updates signs with a red `[Archived]` prefix and blocks entrances with barrier blocks. Structures are never destroyed. This resolves the gap identified by Nightwing: the prior implementation only set `IsArchived = true` in the DB without creating `GenerationJob` records or enqueuing Redis jobs for in-world sign updates or barrier placement. Test specs D-07 and D-08 document the expected behavior.
+**Why:** The original implementation only persisted the archived flag in the database but never communicated the archival to the Minecraft world. Without RCON commands, players would see no visual change in-game. The job queue pattern keeps the archival async and retryable, consistent with how village/building creation works. Barrier blocks prevent entry without destroying the structure, and red `[Archived]` signs make the status immediately visible.
+
+### 2026-02-12: Sprint 3 test specs and channel deletion test architecture
+**By:** Nightwing
+**What:** Created comprehensive test specifications for all Sprint 3 features (Plugin, Tracks, Track Routing, Channel Deletion, Slash Commands, E2E) plus 14 concrete xUnit integration tests for channel deletion (S3-05) and 8 E2E smoke tests (S3-07). Tests reuse existing `BridgeApiFactory` infrastructure. Two tests are `Skip`-ped pending `/api/status` and `/api/navigate` endpoint implementation. Channel deletion tests validate archival idempotency, API response accuracy, building index continuity, null-coordinate handling, and rapid-fire event processing.
+**Why:** Sprint 3 implementation is in parallel. Getting test specs and concrete test cases written now means: (1) implementers know exactly what behavior is expected, (2) edge cases are documented before code is written (shift-left), (3) 14 green tests on the channel deletion path provide immediate regression coverage.
+
+### 2026-02-12: Paper Bridge Plugin architecture — JDK HttpServer + Jedis + Bukkit scheduler
+**By:** Oracle
+**What:** The Paper Bridge Plugin uses JDK's built-in `com.sun.net.httpserver.HttpServer` for the HTTP API (no external web framework), Jedis 5.2.0 for Redis pub/sub, and Gson for JSON serialization. All Bukkit API calls from HTTP handlers are dispatched to the main server thread via `Bukkit.getScheduler().runTask()`. Redis publishes are dispatched asynchronously via `runTaskAsynchronously()`. The HTTP port is configurable via `config.yml`. Dependencies are shaded into the plugin JAR via Gradle's `from(configurations.runtimeClasspath)` pattern.
+**Why:** JDK HttpServer has zero dependencies and is already available in the runtime — keeps the plugin lightweight without pulling in Netty, Spark, or Javalin. Jedis is the simplest Redis client for Java with connection pooling. Main-thread dispatch is mandatory because Bukkit's API is not thread-safe. Async Redis publish prevents blocking the server tick loop. Shading dependencies avoids classpath conflicts with other plugins.
+
+### 2026-02-12: Player event Redis channel — events:minecraft:player
+**By:** Oracle
+**What:** Player join/leave events are published to Redis channel `events:minecraft:player` with schema `{ eventType: "PlayerJoined"|"PlayerLeft", playerUuid, playerName, timestamp }`. The channel name is registered in both Java (`RedisPublisher.CHANNEL_PLAYER_EVENT`) and .NET (`RedisChannels.MinecraftPlayer`). A corresponding `MinecraftPlayerEvent` DTO was added to `Bridge.Data/Events/` for .NET-side deserialization.
+**Why:** Follows the established pattern from Sprint 2 — channel name constants shared between producers and consumers, matching DTO records on both sides. The `events:minecraft:*` namespace was already reserved in the architecture doc. camelCase JSON matches the existing `DiscordChannelEvent` serialization convention.

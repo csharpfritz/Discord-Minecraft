@@ -51,3 +51,20 @@
 
 📌 Team update (2026-02-12): Account linking deferred from Sprint 3 — S3-02 closed, /link removed from S3-01 (Paper Bridge Plugin), /unlink removed from S3-06 (Discord slash commands) — decided by Jeffrey T. Fritz
 📌 Team update (2026-02-12): Only publicly accessible Discord channels are mapped to Minecraft village buildings — private/restricted channels excluded — decided by Jeffrey T. Fritz
+
+- **Paper Bridge Plugin (S3-01)** created under `src/discord-bridge-plugin/`. Java/Gradle project targeting Paper API 1.21.4, Java 21 toolchain. Package: `com.discordminecraft.bridge`.
+- **Plugin architecture:** `BridgePlugin` (JavaPlugin) → `HttpApiServer` (JDK HttpServer on configurable port), `RedisPublisher` (Jedis pool), `PlayerEventListener` (Bukkit events).
+- **HTTP API endpoints:** `GET /health` (server status), `POST /api/command` (execute server commands on main thread), `GET /api/players` (list online players with coordinates).
+- **Redis player events:** Published to `events:minecraft:player` channel. Schema: `{ eventType, playerUuid, playerName, timestamp }` in camelCase JSON via Gson. Async publish via Bukkit scheduler to avoid blocking main thread.
+- **RedisPublisher uses Jedis 5.2.0** with `JedisPool` (maxTotal=4, maxIdle=2). Channel constant `CHANNEL_PLAYER_EVENT` must match `RedisChannels.MinecraftPlayer` in Bridge.Data.
+- **`MinecraftPlayerEvent` DTO** added to `Bridge.Data/Events/` — mirrors Java-side schema for .NET consumer deserialization. Uses same `JsonSerializerDefaults.Web` pattern as `DiscordChannelEvent`.
+- **`RedisChannels.MinecraftPlayer`** constant added: `"events:minecraft:player"` — shared between Java plugin (producer) and .NET services (consumer).
+- **Plugin config:** `plugins/DiscordBridge/config.yml` — `http-port` (default 8080), `redis.host`, `redis.port`. Loaded via Paper's `saveDefaultConfig()`/`getConfig()`.
+- **Gradle build** copies output JAR to `src/AppHost/minecraft-data/plugins/` via `tasks.jar { doLast { ... } }`.
+- **Thread safety pattern:** All Bukkit API calls in HTTP handlers dispatched to main thread via `Bukkit.getScheduler().runTask()`. Redis publishes dispatched async via `runTaskAsynchronously()`.
+- **Concurrent git environment:** When multiple agents share a working directory, use git plumbing (`read-tree`, `write-tree`, `commit-tree`, `update-ref`) with `GIT_INDEX_FILE` to avoid branch-switching races.
+
+📌 Team update (2026-02-12): Minecart track layout — L-shaped paths at y=65, stations 30 blocks south of village center, angle-based platform slots — decided by Batgirl
+📌 Team update (2026-02-12): Channel deletion now enqueues ArchiveBuilding/ArchiveVillage jobs to Redis worldgen queue — BuildingArchiver updates signs + blocks entrances — decided by Lucius
+📌 Team update (2026-02-12): BlueMap integration added as S3-08 — drop-in Paper plugin, port 8100 via Aspire, Java API markers, /map Discord command (Oracle owns) — decided by Gordon
+📌 Team update (2026-02-12): Sprint 3 test specs written — 14 channel deletion + 8 E2E smoke tests, reusing BridgeApiFactory — decided by Nightwing
