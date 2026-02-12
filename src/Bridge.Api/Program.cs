@@ -14,6 +14,13 @@ builder.Services.AddHostedService<DiscordEventConsumer>();
 
 var app = builder.Build();
 
+// Apply EF Core migrations on startup to ensure database schema exists
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<BridgeDbContext>();
+    await db.Database.MigrateAsync();
+}
+
 app.MapDefaultEndpoints();
 
 if (app.Environment.IsDevelopment())
