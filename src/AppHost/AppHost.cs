@@ -17,6 +17,7 @@ var minecraft = builder.AddContainer("minecraft", "itzg/minecraft-server")
     .WithEnvironment("RCON_PASSWORD", rconPassword)
     .WithEndpoint(targetPort: 25665, port: 25665, name: "minecraft", scheme: "tcp")
     .WithEndpoint(targetPort: 25675, port: 25675, name: "rcon", scheme: "tcp")
+    .WithEndpoint(targetPort: 8200, port: 8200, name: "bluemap", scheme: "http")
     .WithBindMount("./minecraft-data", "/data");
 
 var bridgeApi = builder.AddProject<Projects.Bridge_Api>("bridge-api")
@@ -31,6 +32,7 @@ var discordBot = builder.AddProject<Projects.DiscordBot_Service>("discord-bot")
     .WithReference(redis)
     .WithReference(bridgeApi)
     .WithEnvironment("Discord__BotToken", discordBotToken)
+    .WithEnvironment("BlueMap__BaseUrl", minecraft.GetEndpoint("bluemap"))
     .WaitFor(redis)
     .WaitFor(bridgeApi);
 

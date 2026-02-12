@@ -1,0 +1,10 @@
+### 2026-02-12: BlueMap integration architecture — markers via HTTP, port via Aspire
+**By:** Oracle
+**What:**
+1. **BlueMapAPI 2.7.2** added as `compileOnly` dependency to Bridge Plugin. Maven repo `https://repo.bluecolored.de/releases`. `softdepend` in plugin.yml ensures graceful degradation if BlueMap JAR is absent.
+2. **BlueMapIntegration class** manages two marker sets (`discord-villages`, `discord-buildings`) with `ConcurrentHashMap` cache for API reload resilience. Uses `BlueMapAPI.onEnable`/`onDisable` lifecycle hooks. Only overworld maps receive markers.
+3. **HTTP marker endpoints** — `.NET services (WorldGen Worker, Bridge API) call Bridge Plugin HTTP API to create/archive markers: `POST /api/markers/village`, `POST /api/markers/building`, `POST /api/markers/building/archive`, `POST /api/markers/village/archive`. Schema: `{ id, label, x, z }` for create; `{ id }` for archive.
+4. **Aspire port mapping** — BlueMap web server port 8100 exposed via `.WithEndpoint(targetPort: 8100, port: 8100, name: "bluemap", scheme: "http")` on the Paper MC container. HTTP scheme enables Aspire service discovery for the Discord bot.
+5. **BlueMap base URL** passed to Discord bot as `BlueMap__BaseUrl` env var, resolving to `configuration["BlueMap:BaseUrl"]` via .NET config convention. Fallback: `http://localhost:8100`.
+6. **BlueMap config** version-controlled at `src/AppHost/minecraft-data/plugins/BlueMap/{core,webserver}.conf`. Web server binds `0.0.0.0:8100` for Docker accessibility. `accept-download: true` enables auto-download of BlueMap web assets.
+**Why:** BlueMap's Java API runs in-process with the Paper server — no HTTP round-trips for marker management from the plugin side. The HTTP endpoints exist because .NET services (which trigger village/building creation) need to notify the plugin to update markers. ConcurrentHashMap + restore-on-reload handles BlueMap's API lifecycle (it can disable/re-enable during server reloads). Port 8100 avoids conflicts with Bridge Plugin HTTP API (8080) and standard Minecraft ports. The `softdepend` pattern means the Bridge Plugin works without BlueMap — markers are simply no-ops when the API isn't available.
