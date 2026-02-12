@@ -93,3 +93,5 @@
 📌 Team update (2026-02-11): Building generation — 21×21, 4-floor, ring placement at radius=60 — IBuildingGenerator interface, wall signs not standing signs — decided by Batgirl
 📌 Team update (2026-02-11): DefaultIfEmpty(-1).MaxAsync() replaced with nullable Max() pattern in prod code for cross-provider compatibility — decided by Nightwing
 📌 Team update (2026-02-12): Sprint work items are now GitHub Issues with milestones and squad-colored labels — decided by Jeff and Gordon
+
+ Team update (2026-02-12): README.md created with project overview, architecture, getting started, and squad roster with shields.io badges  decided by Gordon

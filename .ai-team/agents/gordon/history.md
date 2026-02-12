@@ -40,3 +40,7 @@
 - Label naming convention: `squad:{name}` — one label per squad member, used to tag issues by assignee
 - Label color assignments: gordon=#0052CC (blue), oracle=#7B61FF (purple), lucius=#0E8A16 (green), batgirl=#D93F0B (orange-red), nightwing=#006B75 (teal)
 📌 Team update (2026-02-12): Sprint work items are now GitHub Issues with milestones and squad-colored labels — decided by Jeff and Gordon
+- README.md created at repo root with project description, architecture overview, getting started, squad roster, and project status
+- Squad badges use shields.io flat-square format: `https://img.shields.io/badge/{emoji}_{name}-{role}-{hex}?style=flat-square&labelColor={hex}&color={hex}`
+
+ Team update (2026-02-12): README.md created with project overview, architecture, getting started, and squad roster with shields.io badges  decided by Gordon
