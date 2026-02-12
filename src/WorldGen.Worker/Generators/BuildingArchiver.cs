@@ -13,7 +13,7 @@ public sealed class BuildingArchiver(RconService rcon, ILogger<BuildingArchiver>
     private const int BaseY = -60; // Superflat world surface level
     private const int Footprint = 21;
     private const int HalfFootprint = Footprint / 2; // 10
-    private const int Floors = 4;
+    private const int Floors = 2;
     private const int FloorHeight = 5;
 
     public async Task ArchiveAsync(BuildingArchiveRequest request, CancellationToken ct)
@@ -46,9 +46,9 @@ public sealed class BuildingArchiver(RconService rcon, ILogger<BuildingArchiver>
         var archivedLabel = "{\"text\":\"[Archived]\",\"color\":\"red\"}";
         var nameText = $"{{\"text\":\"#{truncatedName}\"}}";
 
-        // Entrance sign on south face (outside, above doorway)
+        // Entrance sign on south face (outside, above arch)
         int maxZ = bz + HalfFootprint;
-        await rcon.SendSetBlockAsync(bx, BaseY + 4, maxZ,
+        await rcon.SendSetBlockAsync(bx, BaseY + 5, maxZ,
             $"minecraft:oak_wall_sign[facing=south]{{front_text:{{messages:['{archivedLabel}','{nameText}','\"\"','\"\"']}}}}", ct);
 
         // Floor signs inside each floor (on the south interior wall)
@@ -73,7 +73,7 @@ public sealed class BuildingArchiver(RconService rcon, ILogger<BuildingArchiver>
         int maxZ = bz + HalfFootprint;
         await rcon.SendFillAsync(
             bx - 1, BaseY + 1, maxZ,
-            bx + 1, BaseY + 3, maxZ,
+            bx + 1, BaseY + 4, maxZ,
             "minecraft:barrier", ct);
     }
 }

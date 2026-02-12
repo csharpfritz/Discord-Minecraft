@@ -4,23 +4,28 @@ using WorldGen.Worker.Services;
 
 namespace WorldGen.Worker.Generators;
 
+/// <summary>
+/// Generates medieval castle-style buildings via RCON commands.
+/// 21×21 footprint, 2 floors, cobblestone walls with stone brick trim,
+/// corner turrets, crenellated parapet, arrow slit windows, 3-wide staircase.
+/// </summary>
 public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerator> logger) : IBuildingGenerator
 {
     private const int BaseY = -60; // Superflat world surface level
     private const int Footprint = 21;
     private const int HalfFootprint = Footprint / 2; // 10
-    private const int Floors = 4;
+    private const int Floors = 2;
     private const int FloorHeight = 5; // floor-to-ceiling per story
-    private const int WallTop = BaseY + Floors * FloorHeight; // y=-40
-    private const int RoofY = WallTop + 1; // y=-39
+    private const int WallTop = BaseY + Floors * FloorHeight; // y=-50
+    private const int RoofY = WallTop + 1; // y=-49
 
-    // Carpet colors per floor (different color each floor)
-    private static readonly string[] CarpetColors =
+    // Corner turret positions relative to building center
+    private static readonly (int dx, int dz)[] TurretOffsets =
     [
-        "minecraft:red_carpet",
-        "minecraft:blue_carpet",
-        "minecraft:green_carpet",
-        "minecraft:yellow_carpet"
+        (-HalfFootprint, -HalfFootprint), // NW
+        (HalfFootprint, -HalfFootprint),  // NE
+        (-HalfFootprint, HalfFootprint),  // SW
+        (HalfFootprint, HalfFootprint)    // SE
     ];
 
     public async Task GenerateAsync(BuildingGenerationRequest request, CancellationToken ct)
@@ -34,34 +39,41 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
         int bz = cz + (int)(60 * Math.Sin(angleRad));
 
         logger.LogInformation(
-            "Generating building '{Name}' at ({BX}, {BZ}), index {Index} in village at ({CX}, {CZ})",
+            "Generating medieval castle '{Name}' at ({BX}, {BZ}), index {Index} in village at ({CX}, {CZ})",
             request.Name, bx, bz, request.BuildingIndex, cx, cz);
 
+        // Block placement order is critical to avoid floating/erased blocks:
+        // 1. Foundation  2. Walls  3. Turrets  4. Clear interior
+        // 5. Floors  6. Stairs  7. Roof/parapet  8. Windows
+        // 9. Entrance  10. Lighting  11. Signs
         await GenerateFoundationAsync(bx, bz, ct);
         await GenerateWallsAsync(bx, bz, ct);
+        await GenerateCornerTurretsAsync(bx, bz, ct);
         await ClearInteriorAsync(bx, bz, ct);
         await GenerateFloorsAsync(bx, bz, ct);
-        await GenerateEntranceAsync(bx, bz, ct);
         await GenerateStairsAsync(bx, bz, ct);
-        await GenerateWindowsAsync(bx, bz, ct);
-        await GenerateRoofAsync(bx, bz, ct);
+        await GenerateRoofAndParapetAsync(bx, bz, ct);
+        await GenerateArrowSlitsAsync(bx, bz, ct);
+        await GenerateEntranceAsync(bx, bz, ct);
         await GenerateLightingAsync(bx, bz, ct);
-        await GenerateDecorationAsync(bx, bz, ct);
         await GenerateSignsAsync(bx, bz, request.Name, ct);
 
-        logger.LogInformation("Building '{Name}' generation complete at ({BX}, {BZ})", request.Name, bx, bz);
+        logger.LogInformation("Medieval castle '{Name}' generation complete at ({BX}, {BZ})", request.Name, bx, bz);
     }
 
-    /// <summary>21×21 stone brick platform at y=64</summary>
+    /// <summary>21×21 cobblestone foundation slab at surface level</summary>
     private async Task GenerateFoundationAsync(int bx, int bz, CancellationToken ct)
     {
         await rcon.SendFillAsync(
             bx - HalfFootprint, BaseY, bz - HalfFootprint,
             bx + HalfFootprint, BaseY, bz + HalfFootprint,
-            "minecraft:stone_bricks", ct);
+            "minecraft:cobblestone", ct);
     }
 
-    /// <summary>Stone brick walls from y=65 to y=84, 4 floors × 5 blocks each</summary>
+    /// <summary>
+    /// Cobblestone walls with stone brick trim at top and bottom courses.
+    /// Bottom row and top row are stone bricks, middle is cobblestone.
+    /// </summary>
     private async Task GenerateWallsAsync(int bx, int bz, CancellationToken ct)
     {
         int minX = bx - HalfFootprint;
@@ -69,17 +81,48 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
         int minZ = bz - HalfFootprint;
         int maxZ = bz + HalfFootprint;
 
-        // North wall (minZ face)
-        await rcon.SendFillAsync(minX, BaseY + 1, minZ, maxX, WallTop, minZ, "minecraft:stone_bricks", ct);
-        // South wall (maxZ face)
-        await rcon.SendFillAsync(minX, BaseY + 1, maxZ, maxX, WallTop, maxZ, "minecraft:stone_bricks", ct);
-        // West wall (minX face)
-        await rcon.SendFillAsync(minX, BaseY + 1, minZ, minX, WallTop, maxZ, "minecraft:stone_bricks", ct);
-        // East wall (maxX face)
-        await rcon.SendFillAsync(maxX, BaseY + 1, minZ, maxX, WallTop, maxZ, "minecraft:stone_bricks", ct);
+        // Main cobblestone walls (all 4 faces)
+        await rcon.SendFillAsync(minX, BaseY + 1, minZ, maxX, WallTop, minZ, "minecraft:cobblestone", ct);
+        await rcon.SendFillAsync(minX, BaseY + 1, maxZ, maxX, WallTop, maxZ, "minecraft:cobblestone", ct);
+        await rcon.SendFillAsync(minX, BaseY + 1, minZ, minX, WallTop, maxZ, "minecraft:cobblestone", ct);
+        await rcon.SendFillAsync(maxX, BaseY + 1, minZ, maxX, WallTop, maxZ, "minecraft:cobblestone", ct);
+
+        // Stone brick trim — bottom course
+        await rcon.SendFillAsync(minX, BaseY + 1, minZ, maxX, BaseY + 1, minZ, "minecraft:stone_bricks", ct);
+        await rcon.SendFillAsync(minX, BaseY + 1, maxZ, maxX, BaseY + 1, maxZ, "minecraft:stone_bricks", ct);
+        await rcon.SendFillAsync(minX, BaseY + 1, minZ, minX, BaseY + 1, maxZ, "minecraft:stone_bricks", ct);
+        await rcon.SendFillAsync(maxX, BaseY + 1, minZ, maxX, BaseY + 1, maxZ, "minecraft:stone_bricks", ct);
+
+        // Stone brick trim — top course
+        await rcon.SendFillAsync(minX, WallTop, minZ, maxX, WallTop, minZ, "minecraft:stone_bricks", ct);
+        await rcon.SendFillAsync(minX, WallTop, maxZ, maxX, WallTop, maxZ, "minecraft:stone_bricks", ct);
+        await rcon.SendFillAsync(minX, WallTop, minZ, minX, WallTop, maxZ, "minecraft:stone_bricks", ct);
+        await rcon.SendFillAsync(maxX, WallTop, minZ, maxX, WallTop, maxZ, "minecraft:stone_bricks", ct);
     }
 
-    /// <summary>Clear air inside each floor (19×19 interior)</summary>
+    /// <summary>
+    /// Oak log pillars at the 4 corners, extending 1 block above the main roofline.
+    /// Creates the castle turret silhouette.
+    /// </summary>
+    private async Task GenerateCornerTurretsAsync(int bx, int bz, CancellationToken ct)
+    {
+        foreach (var (dx, dz) in TurretOffsets)
+        {
+            int tx = bx + dx;
+            int tz = bz + dz;
+
+            // Oak log pillar from ground to 1 above wall top
+            for (int y = BaseY + 1; y <= WallTop + 1; y++)
+            {
+                await rcon.SendSetBlockAsync(tx, y, tz, "minecraft:oak_log", ct);
+            }
+
+            // Stone brick cap on top of turret
+            await rcon.SendSetBlockAsync(tx, WallTop + 2, tz, "minecraft:stone_brick_slab", ct);
+        }
+    }
+
+    /// <summary>Clear air inside the walls (19×19 interior, full height)</summary>
     private async Task ClearInteriorAsync(int bx, int bz, CancellationToken ct)
     {
         await rcon.SendFillAsync(
@@ -88,193 +131,226 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
             "minecraft:air", ct);
     }
 
-    /// <summary>Oak plank floors at y=69, y=74, y=79 (between stories)</summary>
+    /// <summary>Oak plank floor between stories (only 1 intermediate floor for 2-story building)</summary>
     private async Task GenerateFloorsAsync(int bx, int bz, CancellationToken ct)
     {
-        for (int floor = 1; floor < Floors; floor++)
-        {
-            int floorY = BaseY + floor * FloorHeight; // y=69, 74, 79
-            await rcon.SendFillAsync(
-                bx - HalfFootprint + 1, floorY, bz - HalfFootprint + 1,
-                bx + HalfFootprint - 1, floorY, bz + HalfFootprint - 1,
-                "minecraft:oak_planks", ct);
-        }
-    }
-
-    /// <summary>3-wide, 3-tall doorway on the south face at ground level (y=65-67)</summary>
-    private async Task GenerateEntranceAsync(int bx, int bz, CancellationToken ct)
-    {
-        int maxZ = bz + HalfFootprint;
+        // Second floor slab at BaseY + FloorHeight = -55
+        int floorY = BaseY + FloorHeight;
         await rcon.SendFillAsync(
-            bx - 1, BaseY + 1, maxZ,
-            bx + 1, BaseY + 3, maxZ,
-            "minecraft:air", ct);
+            bx - HalfFootprint + 1, floorY, bz - HalfFootprint + 1,
+            bx + HalfFootprint - 1, floorY, bz + HalfFootprint - 1,
+            "minecraft:oak_planks", ct);
     }
 
     /// <summary>
-    /// Oak stairs in the NE corner, 3-wide switchback staircase connecting all floors.
-    /// Stairs run along the east wall (positive X), then switch back along the north wall.
+    /// 3-wide oak staircase in the NE corner with landing between floors.
+    /// Runs south-to-north, then switches back west on a landing.
     /// </summary>
     private async Task GenerateStairsAsync(int bx, int bz, CancellationToken ct)
     {
-        int stairX = bx + HalfFootprint - 4; // NE corner area, 3 blocks wide
+        int stairX = bx + HalfFootprint - 5; // NE corner, 3 blocks wide
         int stairZ = bz - HalfFootprint + 1; // near north wall
 
-        for (int floor = 0; floor < Floors - 1; floor++)
+        int baseFloorY = BaseY + 1; // ground floor walking surface
+
+        // Cut stairwell opening in the second floor
+        int upperFloorY = BaseY + FloorHeight;
+        await rcon.SendFillAsync(stairX, upperFloorY, stairZ,
+            stairX + 2, upperFloorY, stairZ + 4, "minecraft:air", ct);
+
+        // First run: 3-wide stairs going north (5 steps to reach landing height)
+        for (int step = 0; step < 4; step++)
         {
-            int baseFloorY = BaseY + 1 + floor * FloorHeight; // bottom of this story
-
-            // First run: stairs going north (negative Z), 3 wide along X
-            for (int step = 0; step < 3; step++)
+            int sy = baseFloorY + step;
+            int sz = stairZ + 4 - step;
+            for (int dx = 0; dx < 3; dx++)
             {
-                int sy = baseFloorY + step;
-                int sz = stairZ + 2 - step; // going from south to north
-                // 3-wide stair blocks facing north
-                for (int dx = 0; dx < 3; dx++)
-                {
-                    await rcon.SendSetBlockAsync(stairX + dx, sy, sz,
-                        "minecraft:oak_stairs[facing=north]", ct);
-                }
-                // Clear air above each stair step
-                await rcon.SendFillAsync(stairX, sy + 1, sz, stairX + 2, sy + 2, sz, "minecraft:air", ct);
-            }
-
-            // Landing block (flat platform to switch direction)
-            await rcon.SendFillAsync(stairX, baseFloorY + 3, stairZ, stairX + 2, baseFloorY + 3, stairZ, "minecraft:oak_planks", ct);
-
-            // Second run: stairs going west (negative X)
-            int landingZ = stairZ;
-            for (int step = 0; step < 2; step++)
-            {
-                int sy = baseFloorY + 4 + step;
-                int sx = stairX + 2 - step;
-                for (int dz = 0; dz < 1; dz++)
-                {
-                    await rcon.SendSetBlockAsync(sx, sy, landingZ + dz,
-                        "minecraft:oak_stairs[facing=west]", ct);
-                }
-            }
-
-            // Clear opening in the floor above for stair access
-            if (floor < Floors - 2)
-            {
-                int upperFloorY = BaseY + (floor + 1) * FloorHeight;
-                await rcon.SendFillAsync(stairX, upperFloorY, stairZ, stairX + 2, upperFloorY, stairZ + 2, "minecraft:air", ct);
+                await rcon.SendSetBlockAsync(stairX + dx, sy, sz,
+                    "minecraft:oak_stairs[facing=north]", ct);
             }
         }
+
+        // Landing platform
+        await rcon.SendFillAsync(stairX, baseFloorY + 4, stairZ,
+            stairX + 2, baseFloorY + 4, stairZ + 1,
+            "minecraft:oak_planks", ct);
     }
 
-    /// <summary>Glass pane windows: 2-wide, centered on each wall face, each floor</summary>
-    private async Task GenerateWindowsAsync(int bx, int bz, CancellationToken ct)
+    /// <summary>
+    /// Stone brick roof slab with crenellated parapet (alternating stone/air merlons).
+    /// </summary>
+    private async Task GenerateRoofAndParapetAsync(int bx, int bz, CancellationToken ct)
     {
         int minX = bx - HalfFootprint;
         int maxX = bx + HalfFootprint;
         int minZ = bz - HalfFootprint;
         int maxZ = bz + HalfFootprint;
 
-        for (int floor = 0; floor < Floors; floor++)
-        {
-            int windowY = BaseY + 2 + floor * FloorHeight; // 2 blocks up from floor level
+        // Solid roof slab
+        await rcon.SendFillAsync(minX, RoofY, minZ, maxX, RoofY, maxZ,
+            "minecraft:stone_brick_slab", ct);
 
-            // North wall windows (centered)
-            await rcon.SendFillAsync(bx - 1, windowY, minZ, bx, windowY, minZ, "minecraft:glass_pane", ct);
-            // South wall windows (centered, skip entrance area on ground floor)
-            if (floor > 0)
-            {
-                await rcon.SendFillAsync(bx - 1, windowY, maxZ, bx, windowY, maxZ, "minecraft:glass_pane", ct);
-            }
-            // West wall windows (centered)
-            await rcon.SendFillAsync(minX, windowY, bz - 1, minX, windowY, bz, "minecraft:glass_pane", ct);
-            // East wall windows (centered)
-            await rcon.SendFillAsync(maxX, windowY, bz - 1, maxX, windowY, bz, "minecraft:glass_pane", ct);
+        // Crenellated parapet — alternating stone bricks along the roof edge
+        // North and south edges
+        for (int x = minX; x <= maxX; x += 2)
+        {
+            await rcon.SendSetBlockAsync(x, RoofY + 1, minZ, "minecraft:stone_bricks", ct);
+            await rcon.SendSetBlockAsync(x, RoofY + 1, maxZ, "minecraft:stone_bricks", ct);
+        }
+        // West and east edges (skip corners to avoid doubling with turrets)
+        for (int z = minZ + 2; z <= maxZ - 2; z += 2)
+        {
+            await rcon.SendSetBlockAsync(minX, RoofY + 1, z, "minecraft:stone_bricks", ct);
+            await rcon.SendSetBlockAsync(maxX, RoofY + 1, z, "minecraft:stone_bricks", ct);
         }
     }
 
-    /// <summary>Stone brick slab roof at y=85</summary>
-    private async Task GenerateRoofAsync(int bx, int bz, CancellationToken ct)
+    /// <summary>
+    /// Arrow slit windows: 1-wide, 2-tall air gaps in walls on each face per floor.
+    /// Placed symmetrically, 4 slits per wall per floor.
+    /// </summary>
+    private async Task GenerateArrowSlitsAsync(int bx, int bz, CancellationToken ct)
     {
-        await rcon.SendFillAsync(
-            bx - HalfFootprint, RoofY, bz - HalfFootprint,
-            bx + HalfFootprint, RoofY, bz + HalfFootprint,
-            "minecraft:stone_brick_slab", ct);
+        int minX = bx - HalfFootprint;
+        int maxX = bx + HalfFootprint;
+        int minZ = bz - HalfFootprint;
+        int maxZ = bz + HalfFootprint;
+
+        // Window positions along each wall (offsets from center)
+        int[] windowOffsets = [-6, -3, 3, 6];
+
+        for (int floor = 0; floor < Floors; floor++)
+        {
+            int windowBaseY = BaseY + 2 + floor * FloorHeight; // 2 blocks above floor
+
+            foreach (int offset in windowOffsets)
+            {
+                // North wall arrow slits
+                await rcon.SendFillAsync(bx + offset, windowBaseY, minZ,
+                    bx + offset, windowBaseY + 1, minZ, "minecraft:air", ct);
+
+                // South wall arrow slits (skip center on ground floor for entrance)
+                if (floor > 0 || (offset != -3 && offset != 3))
+                {
+                    await rcon.SendFillAsync(bx + offset, windowBaseY, maxZ,
+                        bx + offset, windowBaseY + 1, maxZ, "minecraft:air", ct);
+                }
+
+                // West wall arrow slits
+                await rcon.SendFillAsync(minX, windowBaseY, bz + offset,
+                    minX, windowBaseY + 1, bz + offset, "minecraft:air", ct);
+
+                // East wall arrow slits
+                await rcon.SendFillAsync(maxX, windowBaseY, bz + offset,
+                    maxX, windowBaseY + 1, bz + offset, "minecraft:air", ct);
+            }
+        }
     }
 
-    /// <summary>Glowstone in ceiling of each floor, every 5 blocks in a grid</summary>
+    /// <summary>
+    /// 3-wide, 4-tall arched doorway on the south face with stone brick arch.
+    /// </summary>
+    private async Task GenerateEntranceAsync(int bx, int bz, CancellationToken ct)
+    {
+        int maxZ = bz + HalfFootprint;
+
+        // Clear 3-wide, 4-tall opening
+        await rcon.SendFillAsync(bx - 1, BaseY + 1, maxZ,
+            bx + 1, BaseY + 4, maxZ, "minecraft:air", ct);
+
+        // Stone brick arch at top of doorway
+        await rcon.SendSetBlockAsync(bx - 1, BaseY + 4, maxZ, "minecraft:stone_bricks", ct);
+        await rcon.SendSetBlockAsync(bx + 1, BaseY + 4, maxZ, "minecraft:stone_bricks", ct);
+    }
+
+    /// <summary>
+    /// Wall-mounted torches for lighting, placed on interior walls after clearing.
+    /// Torches on all 4 interior walls, spaced every 4 blocks, on each floor.
+    /// </summary>
     private async Task GenerateLightingAsync(int bx, int bz, CancellationToken ct)
     {
+        int minX = bx - HalfFootprint + 1; // interior wall face
+        int maxX = bx + HalfFootprint - 1;
+        int minZ = bz - HalfFootprint + 1;
+        int maxZ = bz + HalfFootprint - 1;
+
         for (int floor = 0; floor < Floors; floor++)
         {
-            // Ceiling Y for each floor: top of the story minus 1 from the ceiling
-            int ceilingY;
-            if (floor < Floors - 1)
-                ceilingY = BaseY + (floor + 1) * FloorHeight - 1; // block below the next floor slab
-            else
-                ceilingY = RoofY - 1; // block below the roof slab
+            int torchY = BaseY + 3 + floor * FloorHeight; // eye-level height
 
-            for (int dx = -HalfFootprint + 3; dx <= HalfFootprint - 3; dx += 5)
+            // Torches on north interior wall (facing south)
+            for (int x = bx - 8; x <= bx + 8; x += 4)
             {
-                for (int dz = -HalfFootprint + 3; dz <= HalfFootprint - 3; dz += 5)
-                {
-                    await rcon.SendSetBlockAsync(bx + dx, ceilingY, bz + dz, "minecraft:glowstone", ct);
-                }
+                await rcon.SendSetBlockAsync(x, torchY, minZ,
+                    "minecraft:wall_torch[facing=south]", ct);
+            }
+
+            // Torches on south interior wall (facing north, skip entrance area on ground floor)
+            for (int x = bx - 8; x <= bx + 8; x += 4)
+            {
+                if (floor == 0 && x >= bx - 1 && x <= bx + 1)
+                    continue; // skip entrance area
+                await rcon.SendSetBlockAsync(x, torchY, maxZ,
+                    "minecraft:wall_torch[facing=north]", ct);
+            }
+
+            // Torches on west interior wall (facing east)
+            for (int z = bz - 8; z <= bz + 8; z += 4)
+            {
+                await rcon.SendSetBlockAsync(minX, torchY, z,
+                    "minecraft:wall_torch[facing=east]", ct);
+            }
+
+            // Torches on east interior wall (facing west)
+            for (int z = bz - 8; z <= bz + 8; z += 4)
+            {
+                await rcon.SendSetBlockAsync(maxX, torchY, z,
+                    "minecraft:wall_torch[facing=west]", ct);
             }
         }
+
+        // Lanterns at each corner of the entrance (exterior, on wall blocks)
+        int entranceZ = bz + HalfFootprint;
+        await rcon.SendSetBlockAsync(bx - 2, BaseY + 3, entranceZ,
+            "minecraft:wall_torch[facing=south]", ct);
+        await rcon.SendSetBlockAsync(bx + 2, BaseY + 3, entranceZ,
+            "minecraft:wall_torch[facing=south]", ct);
     }
 
-    /// <summary>Carpet border pattern around each floor's perimeter, different color per floor</summary>
-    private async Task GenerateDecorationAsync(int bx, int bz, CancellationToken ct)
-    {
-        for (int floor = 0; floor < Floors; floor++)
-        {
-            int carpetY = BaseY + 1 + floor * FloorHeight; // on top of the floor surface
-            string carpet = CarpetColors[floor % CarpetColors.Length];
-
-            int innerMin = -HalfFootprint + 1;
-            int innerMax = HalfFootprint - 1;
-
-            // North and south edges
-            await rcon.SendFillAsync(
-                bx + innerMin, carpetY, bz + innerMin,
-                bx + innerMax, carpetY, bz + innerMin,
-                carpet, ct);
-            await rcon.SendFillAsync(
-                bx + innerMin, carpetY, bz + innerMax,
-                bx + innerMax, carpetY, bz + innerMax,
-                carpet, ct);
-
-            // West and east edges (excluding corners already placed)
-            await rcon.SendFillAsync(
-                bx + innerMin, carpetY, bz + innerMin + 1,
-                bx + innerMin, carpetY, bz + innerMax - 1,
-                carpet, ct);
-            await rcon.SendFillAsync(
-                bx + innerMax, carpetY, bz + innerMin + 1,
-                bx + innerMax, carpetY, bz + innerMax - 1,
-                carpet, ct);
-        }
-    }
-
-    /// <summary>Signs: entrance sign with channel name, floor signs inside each floor</summary>
+    /// <summary>
+    /// Signs placed LAST so they attach to solid wall blocks.
+    /// Entrance sign outside above doorway, channel name sign inside entrance,
+    /// and floor label signs on each floor.
+    /// </summary>
     private async Task GenerateSignsAsync(int bx, int bz, string channelName, CancellationToken ct)
     {
         var truncatedName = channelName.Length > 15 ? channelName[..15] : channelName;
         var nameText = $"{{\"text\":\"#{truncatedName}\"}}";
+        var castleText = "{\"text\":\"Castle Keep\"}";
 
-        // Entrance sign on south face (outside, above doorway)
         int maxZ = bz + HalfFootprint;
-        await rcon.SendSetBlockAsync(bx, BaseY + 4, maxZ,
-            $"minecraft:oak_wall_sign[facing=south]{{front_text:{{messages:['\"\"','{nameText}','\"\"','\"\"']}}}}", ct);
 
-        // Floor signs inside each floor (on the south interior wall, near entrance)
+        // Exterior entrance sign — on the solid wall block above the arch
+        // The arch leaves blocks at bx-1 and bx+1 at BaseY+4, and the wall above at BaseY+5 is solid
+        await rcon.SendSetBlockAsync(bx, BaseY + 5, maxZ,
+            $"minecraft:oak_wall_sign[facing=south]{{front_text:{{messages:['{castleText}','{nameText}','\"\"','\"\"']}}}}", ct);
+
+        // Interior entrance sign — on south interior wall, attached to solid wall
+        int interiorSignZ = bz + HalfFootprint - 1;
+        await rcon.SendSetBlockAsync(bx, BaseY + 2, interiorSignZ,
+            $"minecraft:oak_wall_sign[facing=north]{{front_text:{{messages:['\"\"','{nameText}','\"\"','\"\"']}}}}", ct);
+
+        // Floor signs on each level — on south interior wall
         for (int floor = 0; floor < Floors; floor++)
         {
             int signY = BaseY + 2 + floor * FloorHeight;
-            int signZ = bz + HalfFootprint - 1; // interior south wall
+            // Place sign offset from entrance sign to avoid overlap on ground floor
+            int signX = bx + 3;
 
             var floorLabel = $"{{\"text\":\"Floor {floor + 1}\"}}";
             var channelLabel = $"{{\"text\":\"#{truncatedName}\"}}";
 
-            await rcon.SendSetBlockAsync(bx, signY, signZ,
+            await rcon.SendSetBlockAsync(signX, signY, interiorSignZ,
                 $"minecraft:oak_wall_sign[facing=north]{{front_text:{{messages:['\"\"','{floorLabel}','{channelLabel}','\"\"']}}}}", ct);
         }
     }
