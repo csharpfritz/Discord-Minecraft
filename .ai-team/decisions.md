@@ -225,3 +225,48 @@ Changes applied across branches: `main`, `squad/10-bluemap`, `squad/1-paper-brid
 **By:** Lucius
 **What:** Added `MinecraftHealthCheck : IHealthCheck` in `src/AppHost/MinecraftHealthCheck.cs`. Connects to RCON at `localhost:25675`, sends `seed` command, returns Healthy on success or Unhealthy on failure/timeout (5s). Registered via `builder.Services.AddHealthChecks().AddCheck<MinecraftHealthCheck>("minecraft-rcon")` and wired to the minecraft container via `.WithHealthCheck("minecraft-rcon")`.
 **Why:** Without a health check, Aspire dashboard showed the Minecraft container as healthy immediately on container start, before the server was actually ready to accept RCON commands. Dependent services would fail connecting during startup.
+
+### 2026-02-12: Building layout — ring to grid with 27-block spacing
+**By:** Batgirl
+**What:** Changed from ring layout to a **4×4 grid layout** with proper spacing. GridSpacing: 27 blocks (footprint 21 + buffer 3×2). GridStartOffset: 50 blocks from village center. GridColumns: 4 (supports up to 16 buildings per village). Buildings placed in quadrants around the village center with at least 3 blocks of empty space on all sides.
+**Why:** Buildings were placed in a tight ring at radius 60 using angle-based positioning, causing them to touch or overlap like an apartment complex.
+
+### 2026-02-12: Entrance sign placement — outside doorway facing south
+**By:** Batgirl
+**What:** Moved exterior sign from `maxZ` (inside) to `maxZ + 1` (outside). Sign attaches to the outer wall and faces SOUTH. Position: `(bx, BaseY + 5, maxZ + 1)` — above the 4-tall doorway. Players approaching from outside can now see the channel name.
+**Why:** The entrance sign was placed inside the doorway facing the wrong direction.
+
+### 2026-02-12: Village perimeter fence with gates
+**By:** Batgirl
+**What:** Added oak fence around the entire village at **radius 150 blocks**. Encompasses all buildings (max building edge at ~142 blocks from center). 3-wide oak fence gates at the 4 cardinal entrances. Corner fence posts with lanterns for nighttime visibility.
+**Why:** Village needed a defined perimeter and entry points for navigation.
+
+### 2026-02-12: Medieval castle building design
+**By:** Batgirl
+**What:** Redesigned BuildingGenerator for medieval castle style with proper block placement order. Cobblestone walls with stone brick trim, oak log corner turrets with slab caps, crenellated parapet, arrow slit windows, 3-wide arched entrance, proper 3-wide staircase, wall-mounted torch lighting, and signs placed last on solid walls. Reduced from 4 floors to 2 for better castle keep proportions. Updated BuildingArchiver to match new dimensions. Created comprehensive RCON building SKILL.md capturing all earned knowledge about RCON construction patterns.
+**Why:** Original buildings had floating blocks (glowstone in air after interior clear), unusable 1-block-wide stairs, signs floating without solid wall backing, and boring plain stone brick box aesthetics.
+
+### 2026-02-12: Station platform redesign with shelter and amenities
+**By:** Batgirl
+**What:** Redesigned station platforms as welcoming transit hubs: shelter structure (oak fence corner posts with oak slab roof), hanging lanterns, oak stair benches, potted flowers at shelter posts. Improved signage with bold headers and clear destination/origin text. Expanded to 9×5 blocks. Added coordinate-based hash offset at L-path corners for track collision mitigation.
+**Why:** Original station platforms were functional but bare — just slabs and signs. Players arriving had no sense of arrival or place.
+
+### 2026-02-12: WorldConstants.cs corrections
+**By:** Batgirl
+**What:** Fixed constants that drifted from generator implementations: `BaseY`: 64 → -60 (superflat surface level), `BuildingFloors`: 4 → 2 (castle redesign), `FloorHeight`: 4 → 5 (actual spacing).
+**Why:** Constants were out of sync with actual generator code.
+
+### 2026-02-12: Acceptance test harness architecture
+**By:** Nightwing
+**What:** Created `tests/Acceptance.Tests/` project using `Aspire.Hosting.Testing` to launch the full stack. The harness uses: `FullStackFixture` (IAsyncLifetime + IClassFixture pattern) to manage Aspire app lifecycle, `BlueMapClient` to query BlueMap's static JSON marker files (no REST API exists), `DiscordEventPublisher` to simulate Discord events via Redis pub/sub, job completion detection via polling `queue:worldgen` Redis list length, and serial test execution (single Minecraft container) via xUnit collection + runsettings.
+**Why:** Need end-to-end verification that Discord events → WorldGen jobs → Minecraft structures → BlueMap markers. Unit and integration tests can't catch issues at the Minecraft/BlueMap boundary.
+
+### 2026-02-12: Acceptance test expansion — 54 tests across 7 categories
+**By:** Nightwing
+**What:** Organized acceptance tests into 6 distinct test classes: SmokeTests (6), VillageCreationTests (6), TrackRoutingTests (5), ArchivalTests (9), EdgeCaseTests (8), NegativeTests (13), ConcurrencyTests (7). Total: 54 acceptance tests covering track routing, edge cases (out-of-order events, duplicates, unicode), negative tests (malformed JSON, missing fields, unknown event types), and concurrency (parallel villages, high-volume bursts).
+**Why:** Sprint 3 implementation is in parallel — comprehensive test specs document expected behavior before code is written.
+
+### 2026-02-12: /unlink command stubbed for deferred account linking
+**By:** Oracle
+**What:** The `/unlink` Discord slash command is implemented as a stub that responds with "Account linking is not yet available" (ephemeral message). Command registered and handled, but simply informs the user the feature is coming.
+**Why:** Per the Sprint 3 decision to defer account linking. Provides better UX than an unrecognized command error, and the handler is ready to be filled in when account linking is implemented.

@@ -1,4 +1,0 @@
-### 2026-02-12: Medieval castle building design
-**By:** Batgirl
-**What:** Redesigned BuildingGenerator for medieval castle style with proper block placement order
-**Why:** Original buildings had floating blocks (glowstone in air after interior clear), unusable 1-block-wide stairs, signs floating without solid wall backing, and boring plain stone brick box aesthetics. New design uses cobblestone walls with stone brick trim, oak log corner turrets with slab caps, crenellated parapet, arrow slit windows, 3-wide arched entrance, proper 3-wide staircase, wall-mounted torch lighting, and signs placed last on solid walls. Reduced from 4 floors to 2 for better castle keep proportions. Updated BuildingArchiver to match new dimensions. Created comprehensive RCON building SKILL.md capturing all earned knowledge about RCON construction patterns.
