@@ -1,5 +1,6 @@
 using StackExchange.Redis;
 using WorldGen.Worker.Generators;
+using WorldGen.Worker.Services;
 
 namespace WorldGen.Worker;
 
@@ -11,6 +12,7 @@ namespace WorldGen.Worker;
 public sealed class CrossroadsInitializationService(
     ICrossroadsGenerator crossroadsGenerator,
     IConnectionMultiplexer redis,
+    MarkerService markerService,
     ILogger<CrossroadsInitializationService> logger) : BackgroundService
 {
     private const string ReadyKey = "crossroads:ready";
@@ -34,6 +36,8 @@ public sealed class CrossroadsInitializationService(
 
             await db.StringSetAsync(ReadyKey, DateTime.UtcNow.ToString("O"));
             logger.LogInformation("Crossroads generation complete — '{Key}' flag set in Redis", ReadyKey);
+
+            await markerService.SetVillageMarkerAsync("crossroads", "⭐ Crossroads", 0, 0, stoppingToken);
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {

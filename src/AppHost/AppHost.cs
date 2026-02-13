@@ -26,6 +26,7 @@ var minecraft = builder.AddContainer("minecraft", "itzg/minecraft-server")
     .WithEndpoint(targetPort: 25665, port: 25665, name: "minecraft", scheme: "tcp")
     .WithEndpoint(targetPort: 25575, port: 25675, name: "rcon", scheme: "tcp")
     .WithEndpoint(targetPort: 8200, port: 8200, name: "bluemap", scheme: "http")
+    .WithEndpoint(targetPort: 8180, port: 8180, name: "plugin-http", scheme: "http")
     // .WithBindMount("./minecraft-data", "/data")
     .WithHealthCheck("minecraft-rcon");
 
@@ -51,6 +52,7 @@ var worldGen = builder.AddProject<Projects.WorldGen_Worker>("worldgen-worker")
     .WithEnvironment("Rcon__Host", "localhost")
     .WithEnvironment("Rcon__Port", "25675")
     .WithEnvironment("Rcon__Password", rconPassword)
+    .WithEnvironment("Plugin__BaseUrl", minecraft.GetEndpoint("plugin-http"))
     .WaitFor(redis)
     .WaitFor(minecraft);
 

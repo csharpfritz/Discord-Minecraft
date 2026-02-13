@@ -15,6 +15,10 @@ builder.Services.AddSingleton<IVillageGenerator, VillageGenerator>();
 builder.Services.AddSingleton<IBuildingGenerator, BuildingGenerator>();
 builder.Services.AddSingleton<IBuildingArchiver, BuildingArchiver>();
 builder.Services.AddSingleton<ITrackGenerator, TrackGenerator>();
+builder.Services.AddHttpClient<MarkerService>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Plugin:BaseUrl"] ?? "http://localhost:8180");
+});
 builder.Services.AddHostedService<CrossroadsInitializationService>();
 builder.Services.AddHostedService<WorldGenJobProcessor>();
 
