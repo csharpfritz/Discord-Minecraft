@@ -321,6 +321,11 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
                 "minecraft:air", ct);
         }
 
+        // Determine rail shape based on direction
+        // Horizontal (along X axis): shape=east_west
+        // Vertical (along Z axis): shape=north_south
+        string poweredRailShape = isHorizontal ? "east_west" : "north_south";
+
         // Place rails block-by-block: powered every 8, regular otherwise
         for (int i = start; i <= end; i++)
         {
@@ -334,8 +339,9 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
                 // Redstone block under powered rail for permanent activation
                 await rcon.SendSetBlockAsync(x, TrackbedY, z,
                     "minecraft:redstone_block", ct);
+                // Powered rails need explicit shape to ensure correct orientation
                 await rcon.SendSetBlockAsync(x, TrackY, z,
-                    "minecraft:powered_rail[powered=true]", ct);
+                    $"minecraft:powered_rail[powered=true,shape={poweredRailShape}]", ct);
             }
             else
             {
