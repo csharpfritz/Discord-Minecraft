@@ -76,3 +76,15 @@
 - Key design choice: Activity feed lives in DiscordBot.Service (not Bridge.Api) because that's where the DiscordSocketClient singleton exists. Bridge.Api has no Discord.NET dependency.
 
  Team update (2026-02-13): ChannelTopic optional field added to BuildingJobPayload/BuildingGenerationRequest with default values for backward compatibility  decided by Batgirl
+
+### Sprint 5 — S5-03: Discord Pins to Building Library
+
+- **POST /api/buildings/{id}/pin** endpoint added to Bridge.Api — accepts `PinRequest(Author, Content, Timestamp)`, looks up channel by ID, creates `UpdateBuildingJobPayload` with pin data + building coordinates, enqueues `UpdateBuilding` job to Redis worldgen queue.
+- **UpdateBuildingJobPayload** record in Bridge.Data/Jobs/ — contains ChannelGroupId, ChannelId, BuildingIndex, CenterX/Z, ChannelName, and nested `PinData(Author, Content, Timestamp)`.
+- **PinDisplayService** in WorldGen.Worker/Generators/ — computes building position from village center + building index (same formula as BuildingGenerator). Places up to 6 oak wall signs on south interior wall (`signZ = bz + HalfFootprint - 1`, `signX = bx - 5`) with truncated preview text. Places lectern via Paper plugin HTTP API at `(bx-5, BaseY+1, bz+HalfFootprint-3)`.
+- **WorldGenJobProcessor** updated: `UpdateBuilding` case now deserializes `UpdateBuildingJobPayload` and delegates to `PinDisplayService.DisplayPinAsync`. Previously was a stub logging a warning.
+- **PinDisplayService DI:** Registered via `AddHttpClient<PinDisplayService>` with same Plugin:BaseUrl as MarkerService (port 8180). Injected into WorldGenJobProcessor via primary constructor.
+- **Paper plugin `POST /plugin/lectern`** endpoint added to HttpApiServer.java — accepts `{x, y, z, title, author, pages: [string]}`, runs on main Bukkit thread, sets block to LECTERN, creates `WRITTEN_BOOK` ItemStack with BookMeta, places in lectern inventory.
+- Signs use `oak_wall_sign[facing=north]` with `front_text.messages` format (1.20+ plain text in double quotes). 4 lines × 15 chars per sign, up to 6 signs stacked at Y=BaseY+2 through BaseY+7.
+- Lectern fallback: if plugin HTTP call fails, places an empty lectern via RCON setblock.
+- Book pages: header page with author + timestamp, then content split into 256-char pages.
