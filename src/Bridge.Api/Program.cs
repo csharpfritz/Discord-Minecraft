@@ -293,6 +293,36 @@ app.MapGet("/api/buildings/{id}/spawn", async (int id, BridgeDbContext db) =>
     });
 });
 
+// GET /api/crossroads — Returns info about the Crossroads hub
+app.MapGet("/api/crossroads", async (IConnectionMultiplexer redis, IConfiguration configuration) =>
+{
+    var db = redis.GetDatabase();
+    var ready = await db.KeyExistsAsync("crossroads:ready");
+    var generatedAt = ready ? (string?)await db.StringGetAsync("crossroads:ready") : null;
+    var blueMapBaseUrl = configuration["BlueMap:WebUrl"] ?? "http://localhost:8200";
+    var blueMapUrl = $"{blueMapBaseUrl}/#world:0:0:0:64:0:0:0:0:flat";
+
+    return Results.Ok(new
+    {
+        name = "Crossroads of the World",
+        x = 0,
+        z = 0,
+        y = WorldConstants.BaseY + 1,
+        ready,
+        generatedAt,
+        description = "The central hub connecting all villages via minecart tracks. Features a grand plaza with fountain, four tree-lined avenues, and station platforms for each village.",
+        blueMapUrl
+    });
+});
+
+// GET /api/crossroads/map-url — Returns the BlueMap URL centered on Crossroads
+app.MapGet("/api/crossroads/map-url", (IConfiguration configuration) =>
+{
+    var blueMapBaseUrl = configuration["BlueMap:WebUrl"] ?? "http://localhost:8200";
+    var url = $"{blueMapBaseUrl}/#world:0:0:0:64:0:0:0:0:flat";
+    return Results.Ok(new { url });
+});
+
 // POST /api/players/link — Initiate account link
 app.MapPost("/api/players/link", async (LinkRequest request, IConnectionMultiplexer redis) =>
 {

@@ -104,6 +104,11 @@ public class DiscordBotWorker(
                 "Deep-link to a specific channel's building on the map", isRequired: false)
             .Build();
 
+        var crossroadsCommand = new SlashCommandBuilder()
+            .WithName("crossroads")
+            .WithDescription("Show info about the Crossroads hub — the central meeting point")
+            .Build();
+
         var unlinkCommand = new SlashCommandBuilder()
             .WithName("unlink")
             .WithDescription("Remove your Discord-Minecraft account link")
@@ -115,8 +120,9 @@ public class DiscordBotWorker(
             await client.CreateGlobalApplicationCommandAsync(statusCommand);
             await client.CreateGlobalApplicationCommandAsync(navigateCommand);
             await client.CreateGlobalApplicationCommandAsync(mapCommand);
+            await client.CreateGlobalApplicationCommandAsync(crossroadsCommand);
             await client.CreateGlobalApplicationCommandAsync(unlinkCommand);
-            logger.LogInformation("Registered slash commands: /ping, /status, /navigate, /map, /unlink");
+            logger.LogInformation("Registered slash commands: /ping, /status, /navigate, /map, /crossroads, /unlink");
         }
         catch (Exception ex)
         {
@@ -139,6 +145,9 @@ public class DiscordBotWorker(
                 break;
             case "map":
                 await HandleMapCommandAsync(command);
+                break;
+            case "crossroads":
+                await HandleCrossroadsCommandAsync(command);
                 break;
             case "unlink":
                 await HandleUnlinkCommandAsync(command);
@@ -272,6 +281,62 @@ public class DiscordBotWorker(
                 $"🗺️ **BlueMap** — Interactive world map:\n{blueMapBaseUrl}");
         }
     }
+
+    private async Task HandleCrossroadsCommandAsync(SocketSlashCommand command)
+    {
+        await command.DeferAsync();
+
+        try
+        {
+            var httpClient = httpClientFactory.CreateClient("BridgeApi");
+            var response = await httpClient.GetAsync("/api/crossroads");
+
+            if (!response.IsSuccessStatusCode)
+            {
+                await command.FollowupAsync("⚠️ Could not retrieve Crossroads info. The Bridge API may be unavailable.");
+                return;
+            }
+
+            var crossroads = await response.Content.ReadFromJsonAsync<CrossroadsResponse>();
+            if (crossroads is null)
+            {
+                await command.FollowupAsync("⚠️ Received an unexpected response from the Bridge API.");
+                return;
+            }
+
+            var statusText = crossroads.Ready ? "✅ Generated" : "🔄 Pending generation";
+            var blueMapBaseUrl = configuration["BlueMap:BaseUrl"] ?? "http://localhost:8200";
+
+            var embed = new EmbedBuilder()
+                .WithTitle($"⭐ {crossroads.Name}")
+                .WithDescription(crossroads.Description)
+                .WithColor(Color.Gold)
+                .AddField("📍 Coordinates", $"X: {crossroads.X}  Y: {crossroads.Y}  Z: {crossroads.Z}", inline: true)
+                .AddField("Status", statusText, inline: true)
+                .AddField("🚂 Getting There", "`/goto crossroads` or take a minecart from any village station", inline: false)
+                .AddField("🗺️ BlueMap", $"[View on Map]({crossroads.BlueMapUrl})", inline: false)
+                .WithFooter("Discord ↔ Minecraft Bridge")
+                .WithCurrentTimestamp()
+                .Build();
+
+            await command.FollowupAsync(embed: embed);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to execute /crossroads command");
+            await command.FollowupAsync("⚠️ An error occurred while fetching Crossroads info.");
+        }
+    }
+
+    private record CrossroadsResponse(
+        string Name,
+        int X,
+        int Z,
+        int Y,
+        bool Ready,
+        string? GeneratedAt,
+        string Description,
+        string BlueMapUrl);
 
     private async Task HandleUnlinkCommandAsync(SocketSlashCommand command)
     {
