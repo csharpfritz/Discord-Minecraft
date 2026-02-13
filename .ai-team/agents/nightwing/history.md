@@ -89,3 +89,5 @@
 - E2E tests use `[Trait("Subcategory", "E2E")]` for filtering alongside existing Smoke/Tracks/Archival subcategories
 - Event processing delay (5 seconds) sufficient for DiscordEventConsumer pub/sub → DB writes; no WorldGen/RCON dependency in E2E tests
 - Track job verification is timing-sensitive — WorldGenJobProcessor enqueues CreateTrack after CreateVillage completes, but the job may be processed before we can observe it in the queue. Test validates Crossroads hub topology via API as fallback
+
+ Team update (2026-02-13): Generic villager NPCs removed from villages (SummonVillagersAsync deleted)  future: Discord bots as entities  decided by Jeff via Batgirl

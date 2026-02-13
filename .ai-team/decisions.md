@@ -315,3 +315,29 @@ Changes applied across branches: `main`, `squad/10-bluemap`, `squad/1-paper-brid
 **By:** Oracle
 **What:** Two enhancements to world generation: (1) RCON `tellraw @a` broadcasts during generation — players see colorful progress messages when structures start/finish building. (2) Spawn-proximity job priority — WorldGen queue now prioritizes structures closer to spawn (0,0) via Euclidean distance scoring with `PopClosestJobAsync` replacing `ListRightPopAsync`. Redis LSET+LREM sentinel pattern for atomic removal.
 **Why:** Players connecting to the server should see nearby content built first for a better first impression. Broadcast messages give real-time feedback without requiring Discord bot or external dashboards. Both features are best-effort and never fail actual generation jobs.
+
+### 2026-02-13: Sprint 5 plan  Immersion & Onboarding
+**By:** Gordon
+**What:** Planned Sprint 5 (8 items, 2-week cadence) themed "Immersion & Onboarding." Items: S5-01 Building Interior Furnishing (Batgirl, L), S5-02 Player Welcome & Orientation (Oracle, L), S5-03 Discord Chat to Minecraft Signs (Lucius, M), S5-04 Village Ambient Life (Batgirl, M), S5-05 E2E Test Scenarios (Nightwing, L), S5-06 BlueMap Full Setup (Oracle, M), S5-07 World Activity Feed in Discord (Lucius, M), S5-08 Dynamic Building Sizing (Gordon, M). Carry-forwards: S5-05 from #7, S5-06 from #10.
+**Why:** After 4 sprints of infrastructure, the biggest gap is feel. Players spawn with no context, enter hollow buildings, walk through empty villages. Sprint 5 addresses first-impression onboarding, interior polish, ambient world life, and deeper Discord-MC content sync.
+
+### 2026-02-14: Building interior furnishing and village ambient life conventions (consolidated)
+**By:** Batgirl, Jeff (villager removal directive)
+**What:** Building interiors furnished per-style with distinct floor purposes. Interior methods called LAST in generation chain (after signs). Ground floor: functional/social (throne room, kitchen, planning room). 2nd floor: specialized (armory, study, brewing lab). Channel topic sign on ground floor south interior wall. Village ambient: crop farms at +/-50 blocks from center, flower gardens at +/-20 X +/-8 Z, walkway lanterns every 6 blocks. Cats and dogs remain. ChannelTopic flows as optional field through pipeline with default parameter values for backward compatibility. **Villager NPCs removed** per Jeff's directive — generic Minecraft villagers (librarian, farmer, armorer) don't fit the vision; SummonVillagersAsync deleted. In a future iteration, Discord bots will be represented as in-game entities instead.
+**Why:** Buildings were hollow shells and villages felt lifeless. Interior furnishing gives each building character reflecting its architectural style. Ambient elements make villages feel inhabited. Optional ChannelTopic pattern ensures backward compatibility with jobs already in the queue.
+
+### 2026-02-13: Player welcome, pressure plate walkthrough, and BlueMap deep-links
+**By:** Oracle
+**What:** Golden pressure plate at Crossroads spawn (0, -59, 8) triggers 5-step title walkthrough for new players. Lectern info kiosk at (8, -59, 0) with written book world guide. Player join shows title overlay with configurable guild name + actionbar hint. /map slash command now supports village-name option for coordinate-based BlueMap deep-linking.
+**Why:** First-time players need orientation. Pressure plate is physical, walkthrough uses title commands (high-visibility, no chat spam), lectern provides persistent reference. /map village-name complements existing channel deep-link.
+
+### 2026-02-13: World activity feed architecture  DiscordBot.Service, not Bridge.Api
+**By:** Lucius
+**What:** World activity events flow: WorldGen Worker -> Redis pub/sub (events:world:activity) -> DiscordBot.Service (WorldActivityFeedService) -> Discord embed in #world-activity channel. Subscriber lives in DiscordBot.Service, NOT Bridge.Api. Config: Discord:ActivityChannelId (Aspire parameter discord-activity-channel-id). Rate limited: max 1 embed per 5 seconds via ConcurrentQueue + timer drain loop. Events queued during cooldown posted sequentially.
+**Why:** DiscordBot.Service already has DiscordSocketClient singleton and Discord.Net reference. Adding Discord.NET to Bridge.Api would create unnecessary dependency and second gateway connection. Follows existing pattern: DiscordBot.Service handles all Discord interactions; Bridge.Api handles HTTP API + DB.
+
+### 2026-02-13: E2E test design  service-layer testing without RCON dependency
+**By:** Nightwing
+**What:** 5 E2E test scenarios in EndToEndScenarioTests.cs test the .NET service layer (Bridge.Api + Redis event consumer + WorldGen job queue) via HTTP API and Redis events, without depending on Minecraft RCON. Track job verification uses Crossroads API validation as fallback assertion (timing-sensitive). Building styles (MedievalCastle/TimberCottage/StoneWatchtower) are WorldGen-layer concepts not persisted in DB, so not verifiable via API.
+**Why:** Existing acceptance tests depend on BlueMap markers requiring full Minecraft + Paper MC + BlueMap stack  flaky in CI due to container startup times. Service-layer E2E tests validate same data flow with faster feedback.
+

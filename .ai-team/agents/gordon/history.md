@@ -70,3 +70,5 @@
 📌 Team update (2026-02-13): Crossroads API and BlueMap URL configuration — Bridge.Api has BlueMap:WebUrl config key, /api/crossroads endpoint, /crossroads slash command — decided by Oracle
 
  Team update (2026-02-13): WorldGenJobProcessor now uses spawn-proximity priority (PopClosestJobAsync) instead of FIFO, plus tellraw broadcast messages during generation  decided by Oracle
+
+ Team update (2026-02-13): Sprint 5 Wave 1 complete (S5-01, S5-02, S5-04, S5-05, S5-06, S5-07). Wave 2 unblocked (S5-03, S5-08). Villager NPCs removed per Jeff's directive  decided by team

@@ -67,3 +67,5 @@
 - **S5-06 BlueMap Full Setup.** `/map` slash command extended with `village-name` string option. Village lookup queries `GET /api/villages` from Bridge API, fuzzy matches by name, constructs BlueMap deep-link URL with village center coordinates. Uses `DeferAsync()` pattern for the HTTP call path.
 - **BlueMap setup documented** in README.md — JAR download instructions, `webserver.conf` port config (8200), Aspire port mapping reference, marker set descriptions, command reference table.
 - **README sprint status updated** through Sprint 5, added Player Welcome & Orientation section.
+
+ Team update (2026-02-13): World activity feed (WorldActivityFeedService) added to DiscordBot.Service  uses ConcurrentQueue + 5s rate limit, Discord:ActivityChannelId config  decided by Lucius

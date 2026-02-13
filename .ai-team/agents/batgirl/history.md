@@ -69,3 +69,7 @@
 - 4 flower gardens (3×3 mixed flowers) between plaza and building rows
 - Lanterns on fence posts every 6 blocks along perimeter walkway
 📌 Learning (2026-02-14): Minecraft mob summon commands need PersistenceRequired:1b NBT tag or villagers/animals will despawn when no players are nearby. Without it, villages become empty again after players leave.
+
+📌 Change (2026-02-13): Removed generic villager NPCs (librarian, farmer, armorer) from VillageGenerator.SummonVillagersAsync — method deleted, call removed from AddAmbientDetailsAsync. Per Jeff's directive: Discord bots connected to the server will be represented as entities in a future iteration. Cats, dogs, farms, gardens, and lanterns remain as ambient life.
+
+ Team update (2026-02-13): Player welcome pressure plate at (0, -59, 8) and lectern at (8, -59, 0)  avoid building anything at these Crossroads coords  decided by Oracle

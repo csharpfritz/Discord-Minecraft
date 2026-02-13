@@ -74,3 +74,5 @@
 - Rate limiting: ConcurrentQueue + 5-second delay between posts to avoid Discord API spam.
 - AppHost passes `discord-activity-channel-id` Aspire parameter as env var to the discord-bot project.
 - Key design choice: Activity feed lives in DiscordBot.Service (not Bridge.Api) because that's where the DiscordSocketClient singleton exists. Bridge.Api has no Discord.NET dependency.
+
+ Team update (2026-02-13): ChannelTopic optional field added to BuildingJobPayload/BuildingGenerationRequest with default values for backward compatibility  decided by Batgirl
