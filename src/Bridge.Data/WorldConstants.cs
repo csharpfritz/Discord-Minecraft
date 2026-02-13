@@ -13,4 +13,6 @@ public static class WorldConstants
     public const int CrossroadsPlazaRadius = 30; // 61×61 plaza = radius 30
     public const int CrossroadsStationSlots = 16;
     public const int CrossroadsStationRadius = 35;
+    public const int VillagePlazaInnerRadius = 15; // 31×31 plaza = radius 15 from center
+    public const int VillageStationOffset = 17; // PlazaInnerRadius + 2 block walkway gap
 }

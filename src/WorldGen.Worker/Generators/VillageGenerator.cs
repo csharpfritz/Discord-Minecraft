@@ -1,3 +1,4 @@
+using Bridge.Data;
 using Microsoft.Extensions.Logging;
 using WorldGen.Worker.Models;
 using WorldGen.Worker.Services;
@@ -48,6 +49,7 @@ public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator>
         await GenerateLightingAsync(cx, cz, ct);
         await GenerateSignsAsync(cx, cz, request.Name, ct);
         await GenerateWelcomePathsAsync(cx, cz, ct);
+        await GenerateStationAreaAsync(cx, cz, ct);
         await GenerateVillageFenceAsync(cx, cz, ct);
 
         // Release forceloaded chunks
@@ -250,6 +252,40 @@ public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator>
 
         // East path
         await rcon.SendFillAsync(maxX, BaseY, cz - 1, maxX + 10, BaseY, cz + 1, "minecraft:stone_bricks", ct);
+    }
+
+    /// <summary>
+    /// Station waiting area: 9×5 stone brick platform at the south edge of the plaza.
+    /// Positioned at PlazaRadius + 2 (just outside the south wall opening) so it's
+    /// visible from the village center. TrackGenerator places the actual shelter and rails.
+    /// Includes a directional sign pointing toward the Crossroads.
+    /// </summary>
+    private async Task GenerateStationAreaAsync(int cx, int cz, CancellationToken ct)
+    {
+        logger.LogInformation("Generating station area at south edge of plaza");
+
+        int stationZ = cz + WorldConstants.VillageStationOffset;
+        int halfLen = 4; // PlatformLength 9 / 2
+        int halfWidth = 2; // PlatformWidth 5 / 2
+
+        // Stone brick platform matching TrackGenerator's 9×5 dimensions
+        await rcon.SendFillAsync(
+            cx - halfWidth, BaseY, stationZ - halfLen,
+            cx + halfWidth, BaseY, stationZ + halfLen,
+            "minecraft:stone_bricks", ct);
+
+        // Cobblestone walkway connecting plaza south opening to station platform
+        await rcon.SendFillAsync(
+            cx - 1, BaseY, cz + PlazaRadius,
+            cx + 1, BaseY, stationZ - halfLen,
+            "minecraft:cobblestone", ct);
+
+        // Directional sign facing north (toward approaching players from plaza)
+        var stationText = "\"\u00a7lStation\"";
+        var arrowText = "\"\u2192 Crossroads\"";
+        var emptyText = "\"\"";
+        await rcon.SendSetBlockAsync(cx, BaseY + 1, stationZ - halfLen,
+            $"minecraft:oak_sign[rotation=0]{{front_text:{{messages:['{stationText}','{arrowText}','{emptyText}','{emptyText}']}}}}", ct);
     }
 
     /// <summary>
