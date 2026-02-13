@@ -20,10 +20,15 @@ public sealed class WorldGenJobProcessor(
 {
     private static readonly JsonSerializerOptions PayloadOptions = new(JsonSerializerDefaults.Web);
     private const int MaxRetries = 3;
+    private const string CrossroadsReadyKey = "crossroads:ready";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var db = redis.GetDatabase();
+
+        // Wait for Crossroads hub to be generated before processing any jobs
+        await WaitForCrossroadsAsync(db, stoppingToken);
+
         logger.LogInformation("WorldGen job processor started, listening on {Queue}", RedisQueues.WorldGen);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -272,6 +277,31 @@ public sealed class WorldGenJobProcessor(
             logger.LogInformation(
                 "Enqueued CreateTrack job {JobId}: '{Source}' \u2194 '{Dest}'",
                 genJob.Id, villagePayload.VillageName, existing.Name);
+        }
+    }
+
+    /// <summary>
+    /// Wait for the Crossroads hub to be generated before processing jobs.
+    /// Polls the Redis key every 500ms, logging every 10th check.
+    /// </summary>
+    private async Task WaitForCrossroadsAsync(IDatabase db, CancellationToken ct)
+    {
+        int checks = 0;
+        while (!ct.IsCancellationRequested)
+        {
+            if (await db.KeyExistsAsync(CrossroadsReadyKey))
+            {
+                logger.LogInformation("Crossroads hub is ready — proceeding with job processing");
+                return;
+            }
+
+            checks++;
+            if (checks % 10 == 0)
+            {
+                logger.LogInformation("Waiting for Crossroads hub generation... (check #{Check})", checks);
+            }
+
+            await Task.Delay(500, ct);
         }
     }
 

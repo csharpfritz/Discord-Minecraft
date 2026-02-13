@@ -49,8 +49,10 @@ app.MapPost("/api/mappings/sync", async (SyncRequest request, BridgeDbContext db
         if (group is null)
         {
             var villageIndex = await db.ChannelGroups.CountAsync();
-            int col = villageIndex % WorldConstants.GridColumns;
-            int row = villageIndex / WorldConstants.GridColumns;
+            // Skip grid cell (0,0) — reserved for Crossroads hub
+            int gridIndex = villageIndex + 1;
+            int col = gridIndex % WorldConstants.GridColumns;
+            int row = gridIndex / WorldConstants.GridColumns;
 
             group = new ChannelGroup
             {

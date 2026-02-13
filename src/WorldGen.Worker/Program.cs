@@ -10,10 +10,12 @@ builder.AddRedisClient("redis");
 builder.AddNpgsqlDbContext<BridgeDbContext>("bridgedb");
 
 builder.Services.AddSingleton<RconService>();
+builder.Services.AddSingleton<ICrossroadsGenerator, CrossroadsGenerator>();
 builder.Services.AddSingleton<IVillageGenerator, VillageGenerator>();
 builder.Services.AddSingleton<IBuildingGenerator, BuildingGenerator>();
 builder.Services.AddSingleton<IBuildingArchiver, BuildingArchiver>();
 builder.Services.AddSingleton<ITrackGenerator, TrackGenerator>();
+builder.Services.AddHostedService<CrossroadsInitializationService>();
 builder.Services.AddHostedService<WorldGenJobProcessor>();
 
 var host = builder.Build();

@@ -10,4 +10,6 @@ public static class WorldConstants
     public const int VillagePlazaRadius = 60;
     public const int MaxBuildingsPerVillage = 16;
     public const int BaseY = -60; // Superflat world surface level (bedrock at -64, dirt -63 to -61, grass -60)
+    public const int CrossroadsPlazaRadius = 30; // 61×61 plaza = radius 30
+    public const int CrossroadsStationSlots = 16;
 }
