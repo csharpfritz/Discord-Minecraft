@@ -13,6 +13,7 @@ public sealed class CrossroadsInitializationService(
     ICrossroadsGenerator crossroadsGenerator,
     IConnectionMultiplexer redis,
     MarkerService markerService,
+    RconService rconService,
     ILogger<CrossroadsInitializationService> logger) : BackgroundService
 {
     private const string ReadyKey = "crossroads:ready";
@@ -38,6 +39,17 @@ public sealed class CrossroadsInitializationService(
             logger.LogInformation("Crossroads generation complete — '{Key}' flag set in Redis", ReadyKey);
 
             await markerService.SetVillageMarkerAsync("crossroads", "⭐ Crossroads", 0, 0, stoppingToken);
+
+            try
+            {
+                await rconService.SendCommandAsync(
+                    "tellraw @a [{\"text\":\"⭐ \",\"color\":\"gold\"},{\"text\":\"Crossroads of the World\",\"color\":\"gold\",\"bold\":true},{\"text\":\" has been built at spawn!\",\"color\":\"yellow\"}]",
+                    stoppingToken);
+            }
+            catch (Exception ex)
+            {
+                logger.LogDebug(ex, "Failed to broadcast Crossroads completion — continuing");
+            }
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {

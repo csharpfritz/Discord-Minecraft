@@ -18,6 +18,7 @@ public sealed class WorldGenJobProcessor(
     IBuildingArchiver buildingArchiver,
     ITrackGenerator trackGenerator,
     MarkerService markerService,
+    RconService rconService,
     ILogger<WorldGenJobProcessor> logger) : BackgroundService
 {
     private static readonly JsonSerializerOptions PayloadOptions = new(JsonSerializerDefaults.Web);
@@ -37,17 +38,10 @@ public sealed class WorldGenJobProcessor(
         {
             try
             {
-                var result = await db.ListRightPopAsync(RedisQueues.WorldGen);
-                if (result.IsNullOrEmpty)
-                {
-                    await Task.Delay(500, stoppingToken);
-                    continue;
-                }
-
-                var job = WorldGenJob.FromJson(result!);
+                var job = await PopClosestJobAsync(db, stoppingToken);
                 if (job is null)
                 {
-                    logger.LogWarning("Failed to deserialize job from queue: {Raw}", (string?)result);
+                    await Task.Delay(500, stoppingToken);
                     continue;
                 }
 
@@ -87,7 +81,11 @@ public sealed class WorldGenJobProcessor(
 
         try
         {
+            await BroadcastBuildStartAsync(job, ct);
+
             await DispatchJobAsync(job, ct);
+
+            await BroadcastBuildCompleteAsync(job, ct);
 
             // Set BlueMap markers (best-effort, never fails the job)
             await SetMarkersForJobAsync(job);
@@ -351,5 +349,146 @@ public sealed class WorldGenJobProcessor(
         {
             // Shutting down \u2014 job stays as Pending in DB for reconciliation on next startup
         }
+    }
+
+    private async Task<WorldGenJob?> PopClosestJobAsync(IDatabase db, CancellationToken ct)
+    {
+        var length = await db.ListLengthAsync(RedisQueues.WorldGen);
+        if (length == 0) return null;
+
+        if (length == 1)
+        {
+            var single = await db.ListRightPopAsync(RedisQueues.WorldGen);
+            return single.IsNullOrEmpty ? null : WorldGenJob.FromJson(single!);
+        }
+
+        // Peek all items, find the closest to spawn
+        var items = await db.ListRangeAsync(RedisQueues.WorldGen, 0, -1);
+        if (items.Length == 0) return null;
+
+        int bestIndex = 0;
+        double bestDistance = double.MaxValue;
+
+        for (int i = 0; i < items.Length; i++)
+        {
+            var candidate = WorldGenJob.FromJson(items[i]!);
+            if (candidate is null) continue;
+
+            var (cx, cz) = GetJobCenter(candidate);
+            double dist = Math.Sqrt((double)cx * cx + (double)cz * cz);
+            if (dist < bestDistance)
+            {
+                bestDistance = dist;
+                bestIndex = i;
+            }
+        }
+
+        // Remove the selected item using LSET + LREM sentinel pattern
+        var sentinel = "__PICKED__";
+        await db.ListSetByIndexAsync(RedisQueues.WorldGen, bestIndex, sentinel);
+        await db.ListRemoveAsync(RedisQueues.WorldGen, sentinel, 1);
+
+        return WorldGenJob.FromJson(items[bestIndex]!);
+    }
+
+    private (int cx, int cz) GetJobCenter(WorldGenJob job)
+    {
+        try
+        {
+            return job.JobType switch
+            {
+                WorldGenJobType.CreateVillage =>
+                    JsonSerializer.Deserialize<VillageJobPayload>(job.Payload, PayloadOptions) is { } vp
+                        ? (vp.CenterX, vp.CenterZ) : (int.MaxValue, int.MaxValue),
+                WorldGenJobType.CreateBuilding =>
+                    JsonSerializer.Deserialize<BuildingJobPayload>(job.Payload, PayloadOptions) is { } bp
+                        ? (bp.CenterX, bp.CenterZ) : (int.MaxValue, int.MaxValue),
+                WorldGenJobType.CreateTrack =>
+                    JsonSerializer.Deserialize<TrackJobPayload>(job.Payload, PayloadOptions) is { } tp
+                        ? (tp.SourceCenterX, tp.SourceCenterZ) : (int.MaxValue, int.MaxValue),
+                _ => (int.MaxValue, int.MaxValue)
+            };
+        }
+        catch { return (int.MaxValue, int.MaxValue); }
+    }
+
+    private async Task BroadcastBuildStartAsync(WorldGenJob job, CancellationToken ct)
+    {
+        try
+        {
+            string? message = job.JobType switch
+            {
+                WorldGenJobType.CreateVillage => GetVillageName(job) is string name
+                    ? $"tellraw @a [{{\"text\":\"⚒ Building village \",\"color\":\"yellow\"}},{{\"text\":\"{name}\",\"color\":\"gold\",\"bold\":true}},{{\"text\":\"...\",\"color\":\"yellow\"}}]"
+                    : null,
+                WorldGenJobType.CreateBuilding => GetBuildingName(job) is string name
+                    ? $"tellraw @a [{{\"text\":\"🏗 Constructing \",\"color\":\"aqua\"}},{{\"text\":\"{name}\",\"color\":\"white\",\"bold\":true}},{{\"text\":\"...\",\"color\":\"aqua\"}}]"
+                    : null,
+                WorldGenJobType.CreateTrack => GetTrackNames(job) is (string src, string dst)
+                    ? $"tellraw @a [{{\"text\":\"🚂 Laying tracks: \",\"color\":\"green\"}},{{\"text\":\"{src}\",\"color\":\"white\"}},{{\"text\":\" → \",\"color\":\"green\"}},{{\"text\":\"{dst}\",\"color\":\"white\"}}]"
+                    : null,
+                _ => null
+            };
+            if (message is not null)
+                await rconService.SendCommandAsync(message, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to broadcast build start — continuing");
+        }
+    }
+
+    private async Task BroadcastBuildCompleteAsync(WorldGenJob job, CancellationToken ct)
+    {
+        try
+        {
+            string? message = job.JobType switch
+            {
+                WorldGenJobType.CreateVillage => GetVillageName(job) is string name
+                    ? $"tellraw @a [{{\"text\":\"✅ Village \",\"color\":\"green\"}},{{\"text\":\"{name}\",\"color\":\"gold\",\"bold\":true}},{{\"text\":\" is ready!\",\"color\":\"green\"}}]"
+                    : null,
+                WorldGenJobType.CreateBuilding => GetBuildingName(job) is string name
+                    ? $"tellraw @a [{{\"text\":\"✅ \",\"color\":\"green\"}},{{\"text\":\"{name}\",\"color\":\"white\",\"bold\":true}},{{\"text\":\" construction complete!\",\"color\":\"green\"}}]"
+                    : null,
+                WorldGenJobType.CreateTrack => GetTrackNames(job) is (string src, string dst)
+                    ? $"tellraw @a [{{\"text\":\"✅ Rail line open: \",\"color\":\"green\"}},{{\"text\":\"{src}\",\"color\":\"white\"}},{{\"text\":\" ↔ \",\"color\":\"green\"}},{{\"text\":\"{dst}\",\"color\":\"white\"}}]"
+                    : null,
+                _ => null
+            };
+            if (message is not null)
+                await rconService.SendCommandAsync(message, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogDebug(ex, "Failed to broadcast build complete — continuing");
+        }
+    }
+
+    private string? GetVillageName(WorldGenJob job)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<VillageJobPayload>(job.Payload, PayloadOptions)?.VillageName;
+        }
+        catch { return null; }
+    }
+
+    private string? GetBuildingName(WorldGenJob job)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<BuildingJobPayload>(job.Payload, PayloadOptions)?.ChannelName;
+        }
+        catch { return null; }
+    }
+
+    private (string src, string dst)? GetTrackNames(WorldGenJob job)
+    {
+        try
+        {
+            var tp = JsonSerializer.Deserialize<TrackJobPayload>(job.Payload, PayloadOptions);
+            return tp is not null ? (tp.SourceVillageName, tp.DestinationVillageName) : null;
+        }
+        catch { return null; }
     }
 }
