@@ -36,6 +36,13 @@ public final class BridgePlugin extends JavaPlugin {
         getLogger().info("BlueMap integration initialized");
 
 
+        // Register /goto command
+        String bridgeApiUrl = getConfig().getString("bridge-api-url", "http://localhost:5169");
+        GotoCommand gotoCommand = new GotoCommand(this, bridgeApiUrl, getLogger());
+        getCommand("goto").setExecutor(gotoCommand);
+        getCommand("goto").setTabCompleter(gotoCommand);
+        getLogger().info("Registered /goto command (Bridge API: " + bridgeApiUrl + ")");
+
         // Register player event listener
         getServer().getPluginManager().registerEvents(
                 new PlayerEventListener(this, redisPublisher), this);

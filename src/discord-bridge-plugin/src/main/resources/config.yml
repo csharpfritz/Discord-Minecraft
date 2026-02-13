@@ -3,6 +3,9 @@
 # HTTP API port for receiving commands from .NET services
 http-port: 8180
 
+# Bridge API URL for /goto command
+bridge-api-url: "http://localhost:5169"
+
 # Redis connection settings
 redis:
   host: "localhost"

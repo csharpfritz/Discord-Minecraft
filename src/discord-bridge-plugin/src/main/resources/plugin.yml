@@ -6,3 +6,8 @@ description: Bridge plugin for Discord-Minecraft integration. Exposes HTTP API a
 author: Oracle
 softdepend:
   - BlueMap
+commands:
+  goto:
+    description: Teleport to a Discord channel's building
+    usage: /goto <channel-name>
+    permission: discordbridge.goto

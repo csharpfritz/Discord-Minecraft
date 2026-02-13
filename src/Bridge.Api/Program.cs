@@ -242,6 +242,57 @@ app.MapGet("/api/navigate/{discordChannelId}", async (string discordChannelId, B
     });
 });
 
+// GET /api/buildings/search?q={query} — Fuzzy search for buildings by channel name
+app.MapGet("/api/buildings/search", async (string q, BridgeDbContext db) =>
+{
+    var matches = await db.Channels
+        .Include(c => c.ChannelGroup)
+        .Where(c => !c.IsArchived && c.Name.Contains(q))
+        .OrderBy(c => c.Name)
+        .Take(10)
+        .Select(c => new
+        {
+            c.Id,
+            c.Name,
+            villageName = c.ChannelGroup.Name,
+            c.BuildingIndex,
+            villageCenterX = c.ChannelGroup.CenterX,
+            villageCenterZ = c.ChannelGroup.CenterZ
+        })
+        .ToListAsync();
+
+    return Results.Ok(matches);
+});
+
+// GET /api/buildings/{id}/spawn — Get teleport coordinates for a building
+app.MapGet("/api/buildings/{id}/spawn", async (int id, BridgeDbContext db) =>
+{
+    var channel = await db.Channels
+        .Include(c => c.ChannelGroup)
+        .FirstOrDefaultAsync(c => c.Id == id);
+
+    if (channel is null)
+        return Results.NotFound();
+
+    // Calculate building coordinates from village center + building index
+    // Match the layout logic from BuildingGenerator
+    int row = channel.BuildingIndex % 2;
+    int positionInRow = channel.BuildingIndex / 2;
+    int bx = channel.ChannelGroup.CenterX + (positionInRow - 3) * 24;
+    int bz = row == 0
+        ? channel.ChannelGroup.CenterZ - 20
+        : channel.ChannelGroup.CenterZ + 20;
+
+    return Results.Ok(new
+    {
+        x = bx,
+        y = WorldConstants.BaseY + 1,
+        z = bz + 11, // South entrance
+        channelName = channel.Name,
+        villageName = channel.ChannelGroup.Name
+    });
+});
+
 // POST /api/players/link — Initiate account link
 app.MapPost("/api/players/link", async (LinkRequest request, IConnectionMultiplexer redis) =>
 {
