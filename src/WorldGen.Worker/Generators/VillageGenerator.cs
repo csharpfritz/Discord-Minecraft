@@ -350,37 +350,24 @@ public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator>
     }
 
     // ═══════════════════════════════════════════════════════════════
-    //  Ambient Life (villagers, animals, farms, gardens, lighting)
+    //  Ambient Life (animals, farms, gardens, lighting)
     // ═══════════════════════════════════════════════════════════════
 
     /// <summary>
     /// Adds ambient details to make villages feel alive:
-    /// villager NPCs, cats/dogs near buildings, crop farms on outskirts,
+    /// cats/dogs near buildings, crop farms on outskirts,
     /// flower gardens between buildings, lanterns on fence posts along walkways.
+    /// Note: Generic villager NPCs were intentionally removed — in a future iteration,
+    /// Discord bots connected to the server will be represented as entities instead.
     /// </summary>
     private async Task AddAmbientDetailsAsync(int cx, int cz, CancellationToken ct)
     {
-        logger.LogInformation("Adding ambient village details (NPCs, animals, farms, gardens, lighting)");
+        logger.LogInformation("Adding ambient village details (animals, farms, gardens, lighting)");
 
-        await SummonVillagersAsync(cx, cz, ct);
         await SummonPetsAsync(cx, cz, ct);
         await GenerateCropFarmsAsync(cx, cz, ct);
         await GenerateFlowerGardensAsync(cx, cz, ct);
         await GenerateWalkwayLanternsAsync(cx, cz, ct);
-    }
-
-    /// <summary>
-    /// Summon 2-3 villagers with different professions near the plaza.
-    /// </summary>
-    private async Task SummonVillagersAsync(int cx, int cz, CancellationToken ct)
-    {
-        var commands = new List<string>
-        {
-            $"summon minecraft:villager {cx + 3} {BaseY + 1} {cz + 3} {{VillagerData:{{profession:\"minecraft:librarian\",level:1,type:\"minecraft:plains\"}},PersistenceRequired:1b}}",
-            $"summon minecraft:villager {cx - 4} {BaseY + 1} {cz - 2} {{VillagerData:{{profession:\"minecraft:farmer\",level:1,type:\"minecraft:plains\"}},PersistenceRequired:1b}}",
-            $"summon minecraft:villager {cx + 1} {BaseY + 1} {cz - 5} {{VillagerData:{{profession:\"minecraft:armorer\",level:1,type:\"minecraft:plains\"}},PersistenceRequired:1b}}"
-        };
-        await rcon.SendBatchAsync(commands, ct);
     }
 
     /// <summary>
