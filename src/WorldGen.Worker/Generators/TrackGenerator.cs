@@ -56,8 +56,14 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
             dstStationX, dstPlatformZ,
             ct);
 
-        // Release forceloaded chunks
-        await ForceloadTrackRegionAsync(srcStationX, srcPlatformZ, dstStationX, dstPlatformZ, add: false, ct);
+        // NOTE: We intentionally do NOT release forceloaded chunks along track paths.
+        // Without permanent forceloading, intermediate track chunks won't be loaded
+        // during gameplay, causing minecarts to fall into unloaded chunks and the
+        // track to "disappear" mid-ride. Forceloaded track chunks ensure continuous
+        // minecart travel between villages.
+        // 
+        // Potential future optimization: Use spawn chunks or ticket-based loading
+        // only for the track corridor (1-2 chunk width) rather than the full bounding box.
 
         logger.LogInformation(
             "Track generation complete: '{Source}' \u2194 '{Dest}'",
