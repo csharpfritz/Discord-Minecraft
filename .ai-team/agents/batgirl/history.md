@@ -9,78 +9,25 @@
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
-📌 Team update (2026-02-11): System architecture established — 3 .NET services (Discord Bot, Bridge API, WorldGen Worker) + Paper MC + PostgreSQL + Redis, orchestrated by Aspire 13.1 — decided by Gordon
-📌 Team update (2026-02-11): Paper MC chosen as Minecraft server platform (itzg/minecraft-server Docker container, orchestrated by Aspire) — decided by Gordon
-📌 Team update (2026-02-11): Sprint plan defined — 3 sprints: Foundation, Core Features, Integration & Navigation — decided by Gordon
-📌 Team update (2026-02-11): Channel deletion archives buildings (does not destroy them) — decided by Gordon
-📌 Team update (2026-02-11): Account linking via one-time 6-char codes with 5-min Redis TTL (no OAuth) — decided by Gordon
+### Sprint 1–3 Summary (2026-02-11 → 2026-02-12)
 
-📌 Team update (2026-02-11): Test projects under tests/{ProjectName}.Tests/, CI at .github/workflows/ci.yml with .NET 10 — decided by Nightwing
-📌 Team update (2026-02-11): Snake_case PostgreSQL table names with PascalCase C# entities — decided by Lucius
-📌 Team update (2026-02-11): EF Core enum-to-string conversion for GenerationJobStatus — decided by Lucius
+**S2-04 VillageGenerator:** 31×31 stone brick plaza, perimeter walls, fountain, glowstone lighting, oak signs. RconService wraps CoreRCON with semaphore serialization + rate limiting. Singletons in DI.
 
-📌 S2-04 complete (2026-02-11): Village generation algorithm implemented — VillageGenerator builds a 31×31 stone brick plaza with perimeter walls (3-wide cardinal openings), central fountain, glowstone lighting every 4 blocks along paths, oak signs with village name at center facing all 4 directions, and welcome paths extending 10 blocks outward from each opening. RconService wraps CoreRCON with rate limiting (configurable delay), connection retry on failure, and semaphore-based serialization. RCON config wired via Aspire secret parameters (Rcon__Host, Rcon__Port, Rcon__Password). All registered as singletons in DI. Uses /fill for large areas and /setblock for individual blocks.
-📌 Learning (2026-02-11): CoreRCON RCON class needs Dns.GetHostAddressesAsync to resolve hostnames before connecting — constructor takes IPAddress, not string hostname
-📌 Learning (2026-02-11): Minecraft sign NBT format uses front_text.messages array with JSON text components — rotation values: 0=north, 4=east, 8=south, 12=west
-📌 Learning (2026-02-11): RCON commands need rate limiting (50ms default delay) to avoid overwhelming Paper MC — SemaphoreSlim(1,1) ensures serialized command execution
+**S2-05 BuildingGenerator → Medieval Castle (redesigned 2026-02-12):** 21×21 footprint, 2-floor medieval castle keep — cobblestone walls, stone brick trim, oak log turrets, crenellated parapet, arrow slit windows, wall-mounted torches. 4x4 grid layout (27-block spacing, GridStartOffset=50). Exterior entrance sign at (bx, BaseY+5, maxZ+1).
 
-📌 S2-05 complete (2026-02-11): Building generation algorithm implemented — BuildingGenerator creates 21×21 footprint, 4-floor stone brick buildings via RCON. Each floor is 5 blocks tall (y=65-84). Features: oak plank intermediate floors (y=69,74,79), stone brick slab roof (y=85), 3-wide entrance on south face, oak switchback stairs in NE corner, 2-wide glass pane windows centered on each wall per floor, glowstone ceiling grid every 5 blocks, colored carpet border per floor (red/blue/green/yellow), oak wall signs at entrance and inside each floor with channel name. Buildings placed in ring layout (radius=60) around village center using buildingIndex angle formula.
-📌 Learning (2026-02-11): Minecraft oak_wall_sign uses [facing=direction] blockstate (not rotation like standing signs) — facing=south means the sign face points south, must be placed on a solid block
-📌 Learning (2026-02-11): Building generation order matters — walls first, then clear interior (air fill), then floors, then details. This prevents /fill commands from overwriting previously placed blocks
-📌 Learning (2026-02-11): For multi-floor buildings, clear the entire interior as one big air fill, then place individual floor slabs — more efficient than clearing floor-by-floor
+**S3-03 TrackGenerator:** L-shaped rail paths at y=65, powered rails every 8 blocks + redstone blocks. 9×5 station platforms with shelter, lanterns, benches, flowers, improved signage. Atan2 angle-based slot assignment. Button-activated dispensers with 64 minecarts.
 
-📌 Team update (2026-02-11): Sprint 2 interface contracts established — Redis event schema, job queue format, API endpoints, WorldGen interfaces, shared constants — decided by Gordon
-📌 Team update (2026-02-11): Bridge API nullable coordinate columns (VillageX/Z on ChannelGroup, BuildingX/Z on Channel) — set by WorldGen Worker after generation — decided by Lucius
-📌 Team update (2026-02-11): Event consumer archives groups+channels on deletion, auto-creates groups on out-of-order events — decided by Lucius
-📌 Team update (2026-02-11): Job processor maps VillageJobPayload.VillageName→Name, BuildingJobPayload.ChannelName→Name, CenterX/Z→VillageCenterX/Z — decided by Lucius
-📌 Team update (2026-02-12): Sprint work items are now GitHub Issues with milestones and squad-colored labels — decided by Jeff and Gordon
+**S3-04 Track Routing:** WorldGenJobProcessor enqueues CreateTrack jobs after CreateVillage completes. Each new village connects to all existing non-archived villages.
 
- Team update (2026-02-12): README.md created with project overview, architecture, getting started, and squad roster with shields.io badges  decided by Gordon
-📌 Team update (2026-02-12): README.md created with project overview, architecture, getting started, and squad roster with shields.io badges — decided by Gordon
+**Village Amenities (2026-02-12):** Oak fence perimeter at radius 150. Cobblestone walkways (L-shaped, generated BEFORE foundation). Scalable fountain (3×3 default, 7×7 for 4+ buildings). WorldConstants corrected: BaseY=-60, BuildingFloors=2, FloorHeight=5.
 
-📌 Team update (2026-02-12): Only publicly accessible Discord channels are mapped to Minecraft village buildings — private/restricted channels excluded — decided by Jeffrey T. Fritz
-
-📌 S3-03 complete (2026-02-12): Minecart track generation implemented — TrackGenerator creates L-shaped rail paths between villages at y=65 (elevated trackbed on stone bricks at y=64). Powered rails every 8 blocks with redstone blocks underneath for permanent activation. Station platforms (7×3) placed 30 blocks south of village center with angle-based slot assignment for multiple destinations. Each platform has departure/arrival oak_wall_signs, button-activated dispenser with 64 minecarts, glowstone corner lighting, stone brick slab walkways. CreateTrack job type added to WorldGenJobType enum with TrackJobPayload DTO. Registered as singleton ITrackGenerator in DI.
-📌 Learning (2026-02-12): Minecraft powered rails need a redstone signal to stay powered — placing a redstone_block under each powered rail provides permanent activation without external circuits
-📌 Learning (2026-02-12): Rails cannot be placed diagonally in Minecraft — use L-shaped paths (axis-aligned segments) for track routing between villages
-📌 Learning (2026-02-12): Station platform slot assignment uses Atan2 angle-based hashing to deterministically assign platforms per destination direction — prevents overlapping when multiple tracks terminate at the same village
-📌 Learning (2026-02-12): Dispensers facing=up spawn minecarts on top when activated by button — use /data merge to pre-load minecart items into dispenser inventory
-📌 Learning (2026-02-12): Shared git working directory with concurrent agents causes stash/checkout conflicts — use GitHub push_files API for atomic commits when environment is shared
-
-📌 Team update (2026-02-12): Channel deletion now enqueues ArchiveBuilding/ArchiveVillage jobs to Redis worldgen queue (not just DB flag) — BuildingArchiver updates signs + blocks entrances — decided by Lucius
-📌 Team update (2026-02-12): Sprint 3 test specs written for all features including 14 channel deletion + 8 E2E smoke tests — decided by Nightwing
-📌 Team update (2026-02-12): BlueMap integration added as S3-08 — drop-in Paper plugin, port 8100, Java API markers, /map Discord command — decided by Gordon
-📌 Team update (2026-02-12): Paper Bridge Plugin uses JDK HttpServer + Jedis + Bukkit scheduler, player events on events:minecraft:player — decided by Oracle
-📌 Team update (2026-02-12): Port reassignment — decided by Lucius, requested by Jeff
-📌 S3-04 complete (2026-02-12): Track routing on village creation — WorldGenJobProcessor now enqueues CreateTrack jobs for every existing non-archived village after a CreateVillage job completes successfully. First village is handled gracefully (no tracks needed, logged informatively). Track jobs are queued AFTER village generation completes, ensuring the village is fully built before track generation begins. Station signs at existing villages are updated automatically because each CreateTrack job generates new station platforms with destination signs at both ends via the existing TrackGenerator.
-📌 Learning (2026-02-12): Track routing is a follow-up concern of the job processor, not the event consumer — enqueue CreateTrack jobs after CreateVillage succeeds to guarantee correct ordering
-📌 Learning (2026-02-12): Existing station sign updates happen naturally through new platform creation — each TrackGenerator.GenerateAsync call builds platforms with signs at both the source and destination village, so connecting a new village automatically adds signs at existing ones
-📌 Team update (2026-02-12): RCON config fixes — port mapping (targetPort: 25575, port: 25675) and URI parsing in RconService — decided by Lucius
-📌 Team update (2026-02-12): MinecraftHealthCheck added — Aspire dashboard shows MC as unhealthy until RCON responds — decided by Lucius
-📌 Team update (2026-02-12): /status and /navigate slash commands added with Bridge API endpoints — decided by Oracle
-📌 Team update (2026-02-12): Startup guild sync added to DiscordBotWorker — populates DB on bot ready — decided by Oracle
-📌 Team update (2026-02-12): Sync endpoint now creates GenerationJob records and pushes to Redis queue — decided by Oracle
-
-📌 Medieval castle redesign (2026-02-12): BuildingGenerator redesigned from plain stone brick box to medieval castle keep — cobblestone walls with stone brick trim, oak log corner turrets, crenellated parapet, arrow slit windows, arched entrance, wall-mounted torches. Reduced from 4 floors to 2 for better proportions.
-📌 Learning (2026-02-12): Block placement order is CRITICAL — must be: foundation → walls → turrets → clear interior → floors → stairs → roof → windows → entrance → lighting → signs. Interior clear wipes anything placed before it (floors, lighting). Signs must be placed LAST on solid wall blocks.
-📌 Learning (2026-02-12): Wall-mounted torches (`wall_torch[facing=direction]`) solve the floating glowstone problem — they attach to solid interior walls and are placed after interior clear, so they never get erased.
-📌 Learning (2026-02-12): Superflat world surface is Y=-60 (bedrock -64, dirt -63 to -61, grass -60). All generators use BaseY = -60. BuildingArchiver must match BuildingGenerator's floor count and entrance dimensions.
-📌 RCON building skill created (2026-02-12): Comprehensive SKILL.md at .ai-team/skills/minecraft-rcon-building/ covering superflat coordinates, CoreRCON IPv4 patterns, block placement order, Aspire/Docker networking, and medieval castle patterns.
-
-📌 Station aesthetics overhaul (2026-02-12): TrackGenerator station platforms redesigned from bare slabs to welcoming transit hubs — oak fence shelter with slab roof, hanging lanterns, oak stair benches, potted flowers, improved signage with bold text and color codes. Platforms expanded to 9×5 blocks.
-📌 Learning (2026-02-12): Track collision mitigation uses coordinate-based hash offset at L-path corners — tracks between different village pairs use slightly different Z offsets (range: -2 to +1) to reduce overlap probability when multiple tracks cross the same region.
-📌 Learning (2026-02-12): Station signs should include both destination AND origin village names — passengers arriving need to know where they are, not just where they came from. Sign text formatting uses Minecraft color codes (§l for bold, §2 for green, §7 for gray).
-📌 WorldConstants.cs fixed (2026-02-12): Corrected BaseY from 64 to -60 (superflat surface), BuildingFloors from 4 to 2 (matches castle redesign), FloorHeight from 4 to 5 (matches actual floor spacing). Constants now match generator implementations.
-
-📌 Building layout overhaul (2026-02-12): Changed from ring layout (radius 60, buildings touching) to grid layout (4x4 grid, 27-block center spacing). Formula: footprint (21) + buffer (3+3) = 27 blocks minimum between building centers. Buildings start 50 blocks from village center, giving each building 3+ block empty buffer on all sides.
-📌 Sign placement fix (2026-02-12): Exterior entrance sign moved from maxZ (inside doorway, floating) to maxZ + 1 (outside wall, attached). Sign faces south toward approaching players at BaseY + 5 (above 4-tall doorway).
-📌 Village fence added (2026-02-12): Oak fence perimeter at radius 150 blocks (outside all buildings in the 4x4 grid). Includes 3-wide oak fence gates at cardinal entrances and corner lanterns for visibility.
-
-📌 Interior sign bug fixed (2026-02-12): Removed floating interior entrance sign at (bx, BaseY+2, bz+HalfFootprint-1) — it was floating in the doorway because the entrance is cleared air. Kept only: exterior sign above door (BaseY+5, maxZ+1) and floor label signs offset at signX=bx+3 on each level.
-📌 Cobblestone walkways added (2026-02-12): BuildingGenerator now creates 3-wide cobblestone paths from village center to each building entrance using L-shaped routing (X direction first, then Z to south entrance). VillageGenerator creates perimeter walkway inside fence at FenceRadius-5.
-📌 Fountain scaling added (2026-02-12): VillageGenerator fountain scales by building count — simple 3x3 basin (default) or 7x7 decorative fountain with center pillar + glowstone cap for villages with 4+ buildings. Large fountain at village center: 7x7 stone brick base, stone brick slab rim, 5x5 water pool, 3-tall center pillar capped with glowstone at BaseY+4.
-📌 Learning (2026-02-12): Walkways must be generated BEFORE building foundation — walkway placed first, then foundation overwrites any overlap, ensuring clean building edges while maintaining connected paths.
-📌 Learning (2026-02-12): Forceload area must cover walkway path extent (min/max of village center and building corners) not just building footprint — otherwise distant walkway segments fail silently.
+**Key Minecraft Learnings:**
+- Block placement order: foundation → walls → turrets → clear interior → floors → stairs → roof → windows → entrance → lighting → signs
+- Superflat surface Y=-60; CoreRCON needs Dns.GetHostAddressesAsync for hostnames
+- Sign NBT: front_text.messages array, rotation 0=N/4=E/8=S/12=W; wall_sign uses [facing=direction]
+- Rails can't be diagonal; powered rails need redstone_block underneath
+- Walkways before foundation; forceload must cover walkway extent
+- SKILL.md at .ai-team/skills/minecraft-rcon-building/
 
 📌 Team update (2026-02-13): Crossroads hub + spawn + teleport consolidated — central hub at origin (0,0), hub-and-spoke track topology, /goto command, world spawn at (0,-59,0) — decided by Jeff, Gordon
 📌 Team update (2026-02-13): Train stations should be near village plaza, not far away — decided by Jeff
