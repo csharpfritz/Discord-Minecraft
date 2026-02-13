@@ -12,6 +12,9 @@ public sealed class RconService : IAsyncDisposable
     private readonly ushort _port;
     private readonly string _password;
     private readonly int _commandDelayMs;
+    private int _currentDelayMs;
+    private const int MinDelayMs = 5;
+    private const int MaxDelayMs = 100;
     private RCON? _rcon;
     private readonly SemaphoreSlim _semaphore = new(1, 1);
 
@@ -30,7 +33,8 @@ public sealed class RconService : IAsyncDisposable
             _port = ushort.Parse(configuration["Rcon:Port"] ?? "25575");
         }
         _password = configuration["Rcon:Password"] ?? throw new InvalidOperationException("Rcon:Password is required");
-        _commandDelayMs = int.Parse(configuration["Rcon:CommandDelayMs"] ?? "50");
+        _commandDelayMs = int.Parse(configuration["Rcon:CommandDelayMs"] ?? "10");
+        _currentDelayMs = _commandDelayMs;
     }
 
     private async Task<RCON> GetConnectionAsync()
@@ -75,12 +79,14 @@ public sealed class RconService : IAsyncDisposable
         {
             var rcon = await GetConnectionAsync();
             var response = await rcon.SendCommandAsync(command);
-            await Task.Delay(_commandDelayMs, ct);
+            await Task.Delay(_currentDelayMs, ct);
+            _currentDelayMs = Math.Max(MinDelayMs, _currentDelayMs - 1);
             return response;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "RCON command failed, resetting connection: {Command}", command);
+            _currentDelayMs = Math.Min(MaxDelayMs, _currentDelayMs * 2);
             SafeDisposeRcon();
             throw;
         }
@@ -102,6 +108,61 @@ public sealed class RconService : IAsyncDisposable
         var command = $"setblock {x} {y} {z} {block}";
         _logger.LogDebug("RCON setblock: {Command}", command);
         return SendCommandAsync(command, ct);
+    }
+
+    /// <summary>
+    /// Sends multiple commands in a single semaphore acquisition with ONE delay at the end.
+    /// Much faster than calling SendCommandAsync in a loop.
+    /// </summary>
+    public async Task<string[]> SendBatchAsync(IReadOnlyList<string> commands, CancellationToken ct = default)
+    {
+        if (commands.Count == 0) return Array.Empty<string>();
+
+        await _semaphore.WaitAsync(ct);
+        try
+        {
+            var rcon = await GetConnectionAsync();
+            var responses = new string[commands.Count];
+            for (int i = 0; i < commands.Count; i++)
+            {
+                responses[i] = await rcon.SendCommandAsync(commands[i]);
+            }
+            await Task.Delay(_currentDelayMs, ct); // ONE delay at end of batch
+            _currentDelayMs = Math.Max(MinDelayMs, _currentDelayMs - 1);
+            _logger.LogDebug("RCON batch completed: {Count} commands in batch, delay={Delay}ms", commands.Count, _currentDelayMs);
+            return responses;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "RCON batch of {Count} commands failed, resetting connection", commands.Count);
+            _currentDelayMs = Math.Min(MaxDelayMs, _currentDelayMs * 2);
+            SafeDisposeRcon();
+            throw;
+        }
+        finally
+        {
+            _semaphore.Release();
+        }
+    }
+
+    /// <summary>
+    /// Send multiple fill commands in a single batch.
+    /// </summary>
+    public Task<string[]> SendFillBatchAsync(IReadOnlyList<(int x1, int y1, int z1, int x2, int y2, int z2, string block)> fills, CancellationToken ct = default)
+    {
+        var commands = fills.Select(f => $"fill {f.x1} {f.y1} {f.z1} {f.x2} {f.y2} {f.z2} {f.block}").ToList();
+        _logger.LogDebug("RCON fill batch: {Count} commands", commands.Count);
+        return SendBatchAsync(commands, ct);
+    }
+
+    /// <summary>
+    /// Send multiple setblock commands in a single batch.
+    /// </summary>
+    public Task<string[]> SendSetBlockBatchAsync(IReadOnlyList<(int x, int y, int z, string block)> blocks, CancellationToken ct = default)
+    {
+        var commands = blocks.Select(b => $"setblock {b.x} {b.y} {b.z} {b.block}").ToList();
+        _logger.LogDebug("RCON setblock batch: {Count} commands", commands.Count);
+        return SendBatchAsync(commands, ct);
     }
 
     public async ValueTask DisposeAsync()
