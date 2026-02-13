@@ -12,10 +12,11 @@ public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator>
     private const int LightSpacing = 4;
 
     // Village fence: encompasses all buildings with 3-block buffer
-    // Buildings placed in 4x4 grid at 50 + (0-3)*27 = max 131 blocks from center
-    // Building footprint is 21, so max edge is 131 + 10.5 ~ 142 blocks
-    // Fence at 150 blocks gives 3+ block buffer from outermost building edge
-    private const int FenceRadius = 150;
+    // New "main street" layout: buildings in two rows at ±20 Z, max ~100 X from center
+    // Building footprint is 21, so max edge is ~110 X and ~30 Z
+    // Fence at 120 blocks X and 60 blocks Z (rectangular) would be ideal, but using circular fence
+    // Fence at 75 blocks gives buffer around the tighter building layout
+    private const int FenceRadius = 75;
 
     public async Task GenerateAsync(VillageGenerationRequest request, CancellationToken ct)
     {

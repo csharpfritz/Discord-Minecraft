@@ -31,8 +31,8 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
     // Linear "main street" layout: buildings in two rows facing each other across a central street
     // Building footprint (21) + gap (3) = 24 block spacing between building centers along the street
     private const int BuildingSpacing = 24; // footprint + 3-block gap between buildings
-    private const int StreetWidth = 10; // Space between the two rows of buildings (the "main street")
-    private const int StreetStartOffset = 30; // First building starts 30 blocks from village center
+    private const int StreetWidth = 15; // Main street width between north/south rows (players walk here)
+    private const int RowOffset = 20; // Distance from village center to row center (buildings at ±20)
 
     public async Task GenerateAsync(BuildingGenerationRequest request, CancellationToken ct)
     {
@@ -42,17 +42,17 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
         // Main street layout: Two rows of buildings facing each other across a central street
         // Row 0 (north side): buildings face south (entrance on south = +Z)
         // Row 1 (south side): buildings face north (entrance on north = -Z)
-        // Buildings are placed in a linear row along the X axis
+        // Buildings are placed in a linear row along the X axis, tightly grouped
         int row = request.BuildingIndex % 2; // 0 = north row, 1 = south row
         int positionInRow = request.BuildingIndex / 2; // which building along the row
 
         // X position: linear placement along the street, centered on village
         int bx = cx + (positionInRow - 3) * BuildingSpacing; // Center 8 buildings (indices 0-7 per row)
 
-        // Z position: north or south side of the main street
+        // Z position: north or south side of the main street (tight spacing: 40 blocks between rows)
         int bz = row == 0
-            ? cz - StreetStartOffset - HalfFootprint // North row
-            : cz + StreetStartOffset + HalfFootprint; // South row
+            ? cz - RowOffset // North row (20 blocks north of center)
+            : cz + RowOffset; // South row (20 blocks south of center)
 
         logger.LogInformation(
             "Generating medieval castle '{Name}' at ({BX}, {BZ}), index {Index} in village at ({CX}, {CZ})",

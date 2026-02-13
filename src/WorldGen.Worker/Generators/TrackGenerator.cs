@@ -226,42 +226,39 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
     }
 
     /// <summary>
-    /// Lays track between two station platforms using an L-shaped path with collision-safe offset.
-    /// Rails don't support diagonal placement. Since stations run north-south, we go Z-first then X.
-    /// The track path is offset by a hash of both station coordinates to minimize track collisions.
-    /// IMPORTANT: Rail segments MUST OVERLAP at corners for Minecraft rails to auto-connect into curves.
+    /// Lays track between two station platforms using an L-shaped path.
+    /// Rails don't support diagonal placement. We use Z-first then X approach.
+    /// The corner block is where the two straight segments meet - it must see neighbors from both directions.
     /// </summary>
     private async Task GenerateTrackPathAsync(int srcX, int srcZ, int dstX, int dstZ, CancellationToken ct)
     {
         logger.LogInformation("Laying track path from ({SX},{SZ}) to ({DX},{DZ})",
             srcX, srcZ, dstX, dstZ);
 
-        // Calculate a track-specific X offset to reduce collisions when tracks cross
-        // Different village pairs will use slightly different corner X values
-        int trackOffset = GetTrackCornerOffset(srcX, srcZ, dstX, dstZ);
-
-        // L-shaped path: travel along Z first (matching station orientation), then along X
+        // Simple L-shaped path: Z segment from source, X segment to destination, corner where they meet
+        // Corner is at (srcX, dstZ) - same X as source, same Z as dest
+        int cornerX = srcX;
         int cornerZ = dstZ;
-        int cornerX = srcX + trackOffset;
 
-        // Segment 1: vertical (along Z axis) from source station going north/south
-        // EXTEND to cornerZ to reach the corner block
-        await LayRailSegmentAsync(srcX, srcZ, srcX, cornerZ, ct);
+        // Segment 1: vertical (along Z axis) from source toward corner
+        // Goes from srcZ to cornerZ along X = srcX
+        await LayRailSegmentAsync(srcX, srcZ, cornerX, cornerZ, ct);
 
-        // Short connector from srcX to offset cornerX if needed
-        if (trackOffset != 0)
+        // Segment 2: horizontal (along X axis) from corner to destination
+        // Goes from srcX to dstX along Z = dstZ
+        // IMPORTANT: Start one block PAST cornerX to avoid double-placing the corner rail
+        int startX = cornerX < dstX ? cornerX + 1 : cornerX - 1;
+        if (srcX != dstX) // Only needed if there's horizontal travel
         {
-            // This segment includes both srcX,cornerZ and cornerX,cornerZ
-            await LayRailSegmentAsync(srcX, cornerZ, cornerX, cornerZ, ct);
+            await LayRailSegmentAsync(startX, dstZ, dstX, dstZ, ct);
         }
 
-        // Segment 2: horizontal (along X axis) from corner to destination station
-        // START from cornerX (overlapping at the corner block) so the corner rail sees both directions
-        await LayRailSegmentAsync(cornerX, cornerZ, dstX, dstZ, ct);
-
-        // Place corner rail LAST so it can detect neighbors from both directions
-        // This ensures Minecraft creates a curved rail at the L-shaped turn
-        await PlaceCornerRailAsync(cornerX, cornerZ, ct);
+        // Place corner rail LAST so it detects neighbors and forms a curve
+        // Only needed if we actually have a corner (different X and Z)
+        if (srcX != dstX && srcZ != dstZ)
+        {
+            await PlaceCornerRailAsync(cornerX, cornerZ, ct);
+        }
     }
 
     /// <summary>
@@ -274,17 +271,6 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
         await rcon.SendSetBlockAsync(x, TrackbedY, z, "minecraft:stone_bricks", ct);
         // Place rail - it will auto-detect neighbors and form a curve
         await rcon.SendSetBlockAsync(x, TrackY, z, "minecraft:rail", ct);
-    }
-
-    /// <summary>
-    /// Generates a small offset (0-3 blocks) based on track endpoints to reduce track overlap.
-    /// Tracks between different village pairs will likely use different Z offsets at corners.
-    /// </summary>
-    private static int GetTrackCornerOffset(int srcX, int srcZ, int dstX, int dstZ)
-    {
-        // Simple hash of coordinates to produce 0-3 offset
-        int hash = Math.Abs(srcX ^ srcZ ^ dstX ^ dstZ);
-        return (hash % 4) - 2; // Range: -2 to +1
     }
 
     /// <summary>
