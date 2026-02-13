@@ -194,3 +194,6 @@
 - Semaphore stays at (1,1) — batch optimization removes inter-command delays within a single semaphore hold, not parallelism
 - Batch error handling: on failure, logs batch size, doubles adaptive delay, resets RCON connection (same pattern as single-command error handling)
 - Performance projection: a 100-command batch now takes ~10ms total delay instead of 100×50ms = 5000ms
+
+ Team update (2026-02-13): Oracle replaced ListRightPopAsync with PopClosestJobAsync in WorldGenJobProcessor for spawn-proximity priority + added tellraw broadcasts  decided by Oracle
+ Team update (2026-02-13): Batgirl adopted SendBatchAsync/SendFillBatchAsync/SendSetBlockBatchAsync across all 4 generators, reducing commands from ~7,100 to ~2,600  decided by Batgirl

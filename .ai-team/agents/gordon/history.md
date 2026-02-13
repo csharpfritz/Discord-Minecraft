@@ -68,3 +68,5 @@
 📌 Team update (2026-02-13): Hub-and-Spoke track topology — each village gets one track to Crossroads, O(n) instead of O(n²), radial slot positioning at Crossroads — decided by Batgirl
 📌 Team update (2026-02-13): Village station relocation to plaza edge — VillageStationOffset=17, shared constant in WorldConstants — decided by Batgirl
 📌 Team update (2026-02-13): Crossroads API and BlueMap URL configuration — Bridge.Api has BlueMap:WebUrl config key, /api/crossroads endpoint, /crossroads slash command — decided by Oracle
+
+ Team update (2026-02-13): WorldGenJobProcessor now uses spawn-proximity priority (PopClosestJobAsync) instead of FIFO, plus tellraw broadcast messages during generation  decided by Oracle

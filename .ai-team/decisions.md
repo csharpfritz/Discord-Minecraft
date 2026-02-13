@@ -295,3 +295,23 @@ Changes applied across branches: `main`, `squad/10-bluemap`, `squad/1-paper-brid
 **By:** Oracle
 **What:** Added `BlueMap:WebUrl` config key to Bridge.Api for constructing BlueMap deep-link URLs in API responses (default `http://localhost:8200`). Separate from the Discord bot's `BlueMap:BaseUrl`. The `/api/crossroads` endpoint returns a `blueMapUrl` field with a deep-link centered on Crossroads origin. The `/crossroads` slash command calls this endpoint and displays the link in an embed.
 **Why:** API responses need a publicly-accessible BlueMap URL for embedding in Discord messages. The Crossroads hub is always at world origin (0, 0) so the URL is deterministic.
+
+### 2026-02-13: RCON batch optimization strategy — 3-phase plan
+**By:** Gordon
+**What:** Audited actual RCON command counts (~7,100 per typical world at 55ms each = 6.5 min). Evaluated 6 approaches: Phase 1 (approved): batch command queue + adaptive delay reduction (Lucius). Phase 2-3 (approved): fill consolidation + batch adoption in generators (Batgirl). Rejected: .mcfunction file batching (too complex), parallel RCON connections (Minecraft is single-threaded). Deferred: redundant command elimination (minimal savings). Checkerboard decision: keep decorative pattern using row-fills (61 fills vs 1,860 setblocks). Expected result: ~2,600 commands x 12ms = ~30 seconds (15x speedup).
+**Why:** Jeff reported world generation is too slow. Code audit revealed the real bottlenecks: CrossroadsGenerator checkerboard (1,860 setblocks), TrackGenerator rail placement (~650/track), and BuildingGenerator decoration loops. Batching + fill consolidation deliver 15x speedup without architectural risk.
+
+### 2026-02-13: RconService batch command API and adaptive delay
+**By:** Lucius
+**What:** `RconService` now exposes `SendBatchAsync`, `SendFillBatchAsync`, and `SendSetBlockBatchAsync` methods. Batches acquire the semaphore once and apply a single delay at the end instead of per-command. Default `Rcon:CommandDelayMs` reduced from 50ms to 10ms. Adaptive delay ramps down on success (min 5ms) and doubles on failure (max 100ms). Existing single-command methods are unchanged — generators opt into batching incrementally.
+**Why:** With ~7,100 RCON commands per typical world, the per-command 50ms delay created a 6.5-minute bottleneck. Batch API reduces this to seconds for generators that adopt it. Adaptive delay adds resilience — backs off automatically if the server is struggling, recovers when it's healthy. The semaphore remains at (1,1) so there's no concurrency risk, just fewer unnecessary sleeps.
+
+### 2026-02-13: Fill consolidation across all generators
+**By:** Batgirl
+**What:** Phase 2-3 of RCON optimization. Replaced individual setblock loops with bulk fill commands and batch APIs across all 4 generators. Key patterns: alternating-row fills for checkerboard plaza (31 fills vs 1,860 setblocks), vertical fills for pillars/turrets, fill-then-clear for crenellation, contiguous rail segment fills, decoration batching via SendSetBlockBatchAsync. Total commands reduced from ~7,100 to ~2,600 (~63% reduction). Block placement order preserved within each construction step.
+**Why:** Combined with Lucius's batch API and adaptive delay, expected generation time drops from ~6.5 minutes to ~30 seconds.
+
+### 2026-02-13: World broadcast messages and spawn-proximity build priority
+**By:** Oracle
+**What:** Two enhancements to world generation: (1) RCON `tellraw @a` broadcasts during generation — players see colorful progress messages when structures start/finish building. (2) Spawn-proximity job priority — WorldGen queue now prioritizes structures closer to spawn (0,0) via Euclidean distance scoring with `PopClosestJobAsync` replacing `ListRightPopAsync`. Redis LSET+LREM sentinel pattern for atomic removal.
+**Why:** Players connecting to the server should see nearby content built first for a better first impression. Broadcast messages give real-time feedback without requiring Discord bot or external dashboards. Both features are best-effort and never fail actual generation jobs.

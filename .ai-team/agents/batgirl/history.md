@@ -105,3 +105,5 @@
 📌 Learning (2026-02-14): Vertical fill replaces per-Y setblock loops for pillars/posts/columns — `fill bx y1 bz bx y2 bz block` is 1 command instead of (y2-y1+1) commands. Used for castle turrets (4 fills vs 44 setblocks), cottage posts (8 fills vs 80 setblocks), tree trunks.
 📌 Learning (2026-02-14): Crenellation is more efficient as fill-then-clear than place-every-other — fill 4 full parapet edges with stone bricks (4 fills), then batch-clear alternating positions with air (1 batch). Saves ~32 commands per building vs individual merlon placement.
 📌 Learning (2026-02-14): Rail segment fill optimization — fill contiguous regular rail runs between powered rail intervals, then batch the powered rail + redstone block pairs. For a 500-block track: ~70 fills + 1 batch vs ~562 individual setblocks.
+
+ Team update (2026-02-13): RconService batch API (SendBatchAsync, adaptive delay 50ms->10ms) now available for generator adoption  decided by Lucius
