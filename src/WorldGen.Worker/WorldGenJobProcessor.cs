@@ -98,7 +98,7 @@ public sealed class WorldGenJobProcessor(
 
             logger.LogInformation("Job {JobId} completed successfully", job.JobId);
 
-            // After village creation completes, enqueue track jobs to all existing villages
+            // After village creation completes, enqueue track job to Crossroads
             if (job.JobType == WorldGenJobType.CreateVillage)
             {
                 await EnqueueTrackJobsForNewVillageAsync(job, dbContext, db, ct);
@@ -326,7 +326,7 @@ public sealed class WorldGenJobProcessor(
         {
             if (await db.KeyExistsAsync(CrossroadsReadyKey))
             {
-                logger.LogInformation("Crossroads hub is ready — proceeding with job processing");
+                logger.LogInformation("Crossroads hub is ready \u2014 proceeding with job processing");
                 return;
             }
 

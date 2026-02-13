@@ -1,3 +1,4 @@
+using Bridge.Data;
 using Microsoft.Extensions.Logging;
 using WorldGen.Worker.Models;
 using WorldGen.Worker.Services;
@@ -8,6 +9,8 @@ namespace WorldGen.Worker.Generators;
 /// Generates minecart rail tracks between villages with station structures at each end.
 /// Tracks run at Y=-59 (1 above superflat surface) with powered rails every 8 blocks.
 /// Stations include covered platforms with departure signs, destination maps, and minecart dispensers.
+/// Hub-and-spoke topology: village stations use south-offset placement; Crossroads stations
+/// use radial slot positioning around the plaza perimeter.
 /// </summary>
 public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> logger) : ITrackGenerator
 {
@@ -20,6 +23,10 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
     private const int PlatformLength = 9; // along track direction (expanded for shelter)
     private const int PlatformWidth = 5; // perpendicular to track (wider for amenities)
 
+    // Crossroads radial station positioning
+    private const int CrossroadsStationRadius = WorldConstants.CrossroadsStationRadius;
+    private const int CrossroadsStationSlots = WorldConstants.CrossroadsStationSlots;
+
     public async Task GenerateAsync(TrackGenerationRequest request, CancellationToken ct)
     {
         logger.LogInformation(
@@ -27,33 +34,52 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
             request.SourceVillageName, request.SourceCenterX, request.SourceCenterZ,
             request.DestinationVillageName, request.DestCenterX, request.DestCenterZ);
 
-        // Station positions: south edge of each village
+        bool destIsCrossroads = request.DestCenterX == 0 && request.DestCenterZ == 0;
+
+        // Source station: always south of village plaza
         int srcStationX = request.SourceCenterX;
         int srcStationZ = request.SourceCenterZ + StationOffset;
-        int dstStationX = request.DestCenterX;
-        int dstStationZ = request.DestCenterZ + StationOffset;
 
-        // Determine unique platform Z offset per destination to avoid overlapping platforms
+        int dstStationX, dstStationZ;
+
+        if (destIsCrossroads)
+        {
+            // Crossroads end: use radial slot based on angle from hub to village
+            var (slotX, slotZ) = GetCrossroadsSlotPosition(request.SourceCenterX, request.SourceCenterZ);
+            dstStationX = slotX;
+            dstStationZ = slotZ;
+        }
+        else
+        {
+            // Standard village destination: south of village plaza
+            dstStationX = request.DestCenterX;
+            dstStationZ = request.DestCenterZ + StationOffset;
+        }
+
+        // Determine unique platform offset for source (village side)
         int srcPlatformOffset = GetPlatformOffset(request.SourceCenterX, request.SourceCenterZ,
             request.DestCenterX, request.DestCenterZ);
-        int dstPlatformOffset = GetPlatformOffset(request.DestCenterX, request.DestCenterZ,
-            request.SourceCenterX, request.SourceCenterZ);
 
         int srcPlatformZ = srcStationZ + srcPlatformOffset * (PlatformWidth + 3);
-        int dstPlatformZ = dstStationZ + dstPlatformOffset * (PlatformWidth + 3);
+
+        // Crossroads destination doesn't need platform offset — each village gets its own radial slot
+        int dstPlatformX = dstStationX;
+        int dstPlatformZ = destIsCrossroads
+            ? dstStationZ
+            : dstStationZ + GetPlatformOffset(request.DestCenterX, request.DestCenterZ,
+                request.SourceCenterX, request.SourceCenterZ) * (PlatformWidth + 3);
 
         // Forceload all chunks along the track path before placing blocks
-        // Tracks can span large distances — forceload in segments
-        await ForceloadTrackRegionAsync(srcStationX, srcPlatformZ, dstStationX, dstPlatformZ, add: true, ct);
+        await ForceloadTrackRegionAsync(srcStationX, srcPlatformZ, dstPlatformX, dstPlatformZ, add: true, ct);
 
         await GenerateStationPlatformAsync(srcStationX, srcPlatformZ,
             request.DestinationVillageName, request.SourceVillageName, ct);
-        await GenerateStationPlatformAsync(dstStationX, dstPlatformZ,
+        await GenerateStationPlatformAsync(dstPlatformX, dstPlatformZ,
             request.SourceVillageName, request.DestinationVillageName, ct);
 
         await GenerateTrackPathAsync(
             srcStationX, srcPlatformZ,
-            dstStationX, dstPlatformZ,
+            dstPlatformX, dstPlatformZ,
             ct);
 
         // NOTE: We intentionally do NOT release forceloaded chunks along track paths.
@@ -102,6 +128,22 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
         if (angle < 0) angle += 2 * Math.PI;
         int slot = (int)(angle / (2 * Math.PI) * 8); // up to 8 platform slots
         return slot;
+    }
+
+    /// <summary>
+    /// Calculates the radial station slot position at Crossroads for a village.
+    /// Uses the angle from Crossroads (0,0) to the village to pick one of 16 evenly
+    /// spaced slots around the plaza perimeter at CrossroadsStationRadius.
+    /// </summary>
+    private static (int X, int Z) GetCrossroadsSlotPosition(int villageCenterX, int villageCenterZ)
+    {
+        double angle = Math.Atan2(villageCenterZ, villageCenterX);
+        if (angle < 0) angle += 2 * Math.PI;
+        int slotIndex = (int)(angle / (2 * Math.PI) * CrossroadsStationSlots) % CrossroadsStationSlots;
+        double slotAngle = slotIndex * (2 * Math.PI / CrossroadsStationSlots);
+        int slotX = (int)(CrossroadsStationRadius * Math.Cos(slotAngle));
+        int slotZ = (int)(CrossroadsStationRadius * Math.Sin(slotAngle));
+        return (slotX, slotZ);
     }
 
     /// <summary>
@@ -177,10 +219,10 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
         var truncatedLocal = localVillageName.Length > 12 ? localVillageName[..12] : localVillageName;
         var destText = $"\"{truncatedDest}\"";
         var localText = $"\"{truncatedLocal}\"";
-        var arrowText = "\"↑\""; // North arrow for north-south travel
-        var stationText = "\"§lStation\""; // Bold "Station"
-        var arrivedText = "\"§2Welcome!\""; // Green "Welcome!"
-        var fromText = $"\"§7From: {truncatedLocal}\""; // Gray "From:"
+        var arrowText = "\"\u2191\""; // North arrow for north-south travel
+        var stationText = "\"\u00a7lStation\""; // Bold "Station"
+        var arrivedText = "\"\u00a72Welcome!\""; // Green "Welcome!"
+        var fromText = $"\"\u00a77From: {truncatedLocal}\""; // Gray "From:"
         var emptyText = "\"\"";
 
         // Departure sign at south end (facing west so passengers can read it from platform)
