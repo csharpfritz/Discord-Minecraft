@@ -173,11 +173,11 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
             "minecraft:air", ct);
 
         // 3. Rail track down the center of the platform running north-south (along Z)
-        for (int z = cz - halfLen; z <= cz + halfLen; z++)
-        {
-            await rcon.SendSetBlockAsync(cx, TrackbedY, z, "minecraft:stone_bricks", ct);
-            await rcon.SendSetBlockAsync(cx, TrackY, z, "minecraft:powered_rail[powered=true]", ct);
-        }
+        // Use fill for the trackbed and powered rails along the entire platform center
+        await rcon.SendFillAsync(cx, TrackbedY, cz - halfLen, cx, TrackbedY, cz + halfLen,
+            "minecraft:stone_bricks", ct);
+        await rcon.SendFillAsync(cx, TrackY, cz - halfLen, cx, TrackY, cz + halfLen,
+            "minecraft:powered_rail[powered=true]", ct);
 
         // 4. Stone brick slab walkways on east and west sides of the track
         await rcon.SendFillAsync(
@@ -205,14 +205,11 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
             cx + halfWidth, TrackY + 3, cz + halfLen,
             "minecraft:oak_slab[type=top]", ct);
 
-        // 7. Sign support blocks at north and south ends (outside the track path for clear entry/exit)
-        // Place supports on the EAST side so they don't block track
-        await rcon.SendSetBlockAsync(cx + halfWidth + 1, TrackY, cz - halfLen, "minecraft:stone_bricks", ct);
-        await rcon.SendSetBlockAsync(cx + halfWidth + 1, TrackY + 1, cz - halfLen, "minecraft:stone_bricks", ct);
-        await rcon.SendSetBlockAsync(cx + halfWidth + 1, TrackY + 2, cz - halfLen, "minecraft:stone_bricks", ct);
-        await rcon.SendSetBlockAsync(cx + halfWidth + 1, TrackY, cz + halfLen, "minecraft:stone_bricks", ct);
-        await rcon.SendSetBlockAsync(cx + halfWidth + 1, TrackY + 1, cz + halfLen, "minecraft:stone_bricks", ct);
-        await rcon.SendSetBlockAsync(cx + halfWidth + 1, TrackY + 2, cz + halfLen, "minecraft:stone_bricks", ct);
+        // 7. Sign support blocks at north and south ends — batch as vertical fills
+        await rcon.SendFillAsync(cx + halfWidth + 1, TrackY, cz - halfLen,
+            cx + halfWidth + 1, TrackY + 2, cz - halfLen, "minecraft:stone_bricks", ct);
+        await rcon.SendFillAsync(cx + halfWidth + 1, TrackY, cz + halfLen,
+            cx + halfWidth + 1, TrackY + 2, cz + halfLen, "minecraft:stone_bricks", ct);
 
         // 8. Destination signs with village names — plain quoted strings, NOT JSON objects
         var truncatedDest = destinationName.Length > 15 ? destinationName[..15] : destinationName;
@@ -250,27 +247,24 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
         await rcon.SendSetBlockAsync(cx - halfWidth, TrackY + 1, cz + halfLen - 1,
             $"minecraft:oak_wall_sign[facing=east]{{front_text:{{messages:[{emptyText},'{getCartText}','{pressText}',{emptyText}]}}}}", ct);
 
-        // 10. Lantern lighting under the shelter roof (warm lighting)
-        await rcon.SendSetBlockAsync(cx - halfWidth + 1, TrackY + 2, cz - 2, "minecraft:lantern[hanging=true]", ct);
-        await rcon.SendSetBlockAsync(cx - halfWidth + 1, TrackY + 2, cz + 2, "minecraft:lantern[hanging=true]", ct);
-        await rcon.SendSetBlockAsync(cx + halfWidth - 1, TrackY + 2, cz - 2, "minecraft:lantern[hanging=true]", ct);
-        await rcon.SendSetBlockAsync(cx + halfWidth - 1, TrackY + 2, cz + 2, "minecraft:lantern[hanging=true]", ct);
-
-        // 11. Decorative benches (stairs facing inward toward track) on east and west sides
-        await rcon.SendSetBlockAsync(cx - halfWidth + 1, TrackY, cz - 2,
-            "minecraft:oak_stairs[facing=east]", ct);
-        await rcon.SendSetBlockAsync(cx - halfWidth + 1, TrackY, cz + 2,
-            "minecraft:oak_stairs[facing=east]", ct);
-        await rcon.SendSetBlockAsync(cx + halfWidth - 1, TrackY, cz - 2,
-            "minecraft:oak_stairs[facing=west]", ct);
-        await rcon.SendSetBlockAsync(cx + halfWidth - 1, TrackY, cz + 2,
-            "minecraft:oak_stairs[facing=west]", ct);
-
-        // 12. Flower pot decorations near shelter posts (welcoming touch)
-        await rcon.SendSetBlockAsync(cx - halfWidth + 1, TrackY, cz - halfLen + 1,
-            "minecraft:potted_red_tulip", ct);
-        await rcon.SendSetBlockAsync(cx + halfWidth - 1, TrackY, cz - halfLen + 1,
-            "minecraft:potted_blue_orchid", ct);
+        // 10-12. Batch remaining station decorations: lanterns, benches, flower pots
+        var stationDecor = new List<(int x, int y, int z, string block)>
+        {
+            // Lanterns
+            (cx - halfWidth + 1, TrackY + 2, cz - 2, "minecraft:lantern[hanging=true]"),
+            (cx - halfWidth + 1, TrackY + 2, cz + 2, "minecraft:lantern[hanging=true]"),
+            (cx + halfWidth - 1, TrackY + 2, cz - 2, "minecraft:lantern[hanging=true]"),
+            (cx + halfWidth - 1, TrackY + 2, cz + 2, "minecraft:lantern[hanging=true]"),
+            // Benches
+            (cx - halfWidth + 1, TrackY, cz - 2, "minecraft:oak_stairs[facing=east]"),
+            (cx - halfWidth + 1, TrackY, cz + 2, "minecraft:oak_stairs[facing=east]"),
+            (cx + halfWidth - 1, TrackY, cz - 2, "minecraft:oak_stairs[facing=west]"),
+            (cx + halfWidth - 1, TrackY, cz + 2, "minecraft:oak_stairs[facing=west]"),
+            // Flower pots
+            (cx - halfWidth + 1, TrackY, cz - halfLen + 1, "minecraft:potted_red_tulip"),
+            (cx + halfWidth - 1, TrackY, cz - halfLen + 1, "minecraft:potted_blue_orchid")
+        };
+        await rcon.SendSetBlockBatchAsync(stationDecor, ct);
     }
 
     /// <summary>
@@ -374,28 +368,46 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
         // Vertical (along Z axis): shape=north_south
         string poweredRailShape = isHorizontal ? "east_west" : "north_south";
 
-        // Place rails block-by-block: powered every 8, regular otherwise
+        // Place rails: fill 7-block regular rail runs, individual setblock for powered rail + redstone
+        var poweredBlocks = new List<(int x, int y, int z, string block)>();
+        int segStart = start;
         for (int i = start; i <= end; i++)
         {
-            int x = isHorizontal ? i : fixedCoord;
-            int z = isHorizontal ? fixedCoord : i;
-
             bool isPowered = (i - start) % PoweredRailInterval == 0;
 
             if (isPowered)
             {
-                // Redstone block under powered rail for permanent activation
-                await rcon.SendSetBlockAsync(x, TrackbedY, z,
-                    "minecraft:redstone_block", ct);
-                // Powered rails need explicit shape to ensure correct orientation
-                await rcon.SendSetBlockAsync(x, TrackY, z,
-                    $"minecraft:powered_rail[powered=true,shape={poweredRailShape}]", ct);
-            }
-            else
-            {
-                await rcon.SendSetBlockAsync(x, TrackY, z,
-                    "minecraft:rail", ct);
+                int x = isHorizontal ? i : fixedCoord;
+                int z = isHorizontal ? fixedCoord : i;
+
+                // Flush any pending regular rail segment before this powered rail
+                if (segStart < i)
+                {
+                    if (isHorizontal)
+                        await rcon.SendFillAsync(segStart, TrackY, fixedCoord, i - 1, TrackY, fixedCoord, "minecraft:rail", ct);
+                    else
+                        await rcon.SendFillAsync(fixedCoord, TrackY, segStart, fixedCoord, TrackY, i - 1, "minecraft:rail", ct);
+                }
+
+                // Powered rail + redstone block
+                poweredBlocks.Add((x, TrackbedY, z, "minecraft:redstone_block"));
+                poweredBlocks.Add((x, TrackY, z,
+                    $"minecraft:powered_rail[powered=true,shape={poweredRailShape}]"));
+
+                segStart = i + 1;
             }
         }
+
+        // Flush remaining regular rail segment after last powered rail
+        if (segStart <= end)
+        {
+            if (isHorizontal)
+                await rcon.SendFillAsync(segStart, TrackY, fixedCoord, end, TrackY, fixedCoord, "minecraft:rail", ct);
+            else
+                await rcon.SendFillAsync(fixedCoord, TrackY, segStart, fixedCoord, TrackY, end, "minecraft:rail", ct);
+        }
+
+        if (poweredBlocks.Count > 0)
+            await rcon.SendSetBlockBatchAsync(poweredBlocks, ct);
     }
 }

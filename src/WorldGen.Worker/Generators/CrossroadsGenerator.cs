@@ -75,18 +75,18 @@ public sealed class CrossroadsGenerator(RconService rcon, ILogger<CrossroadsGene
             cx + PlazaRadius, BaseY, cz + PlazaRadius,
             "minecraft:stone_bricks", ct);
 
-        // Overlay polished andesite in checkerboard pattern
-        // Place andesite on every other block where (x + z) is odd
-        for (int x = cx - PlazaRadius; x <= cx + PlazaRadius; x++)
+        // Overlay polished andesite in alternating-row pattern (decorative stripes)
+        // One fill per z-row instead of 1,860 individual setblock calls
+        var rowFills = new List<(int x1, int y1, int z1, int x2, int y2, int z2, string block)>();
+        for (int z = cz - PlazaRadius; z <= cz + PlazaRadius; z++)
         {
-            for (int z = cz - PlazaRadius; z <= cz + PlazaRadius; z++)
+            if ((z % 2 != 0))
             {
-                if ((x + z) % 2 != 0)
-                {
-                    await rcon.SendSetBlockAsync(x, BaseY, z, "minecraft:polished_andesite", ct);
-                }
+                rowFills.Add((cx - PlazaRadius, BaseY, z, cx + PlazaRadius, BaseY, z,
+                    "minecraft:polished_andesite"));
             }
         }
+        await rcon.SendFillBatchAsync(rowFills, ct);
     }
 
     /// <summary>
@@ -182,69 +182,62 @@ public sealed class CrossroadsGenerator(RconService rcon, ILogger<CrossroadsGene
         int startOffset = PlazaRadius + 1;
         int endOffset = PlazaRadius + AvenueLength;
 
-        // Lay the avenue path
-        for (int i = startOffset; i <= endOffset; i++)
+        // Lay the entire avenue path with a single fill command per avenue
+        if (dx != 0) // E-W avenue: path extends along X, width along Z
         {
-            int ax = cx + dx * i;
-            int az = cz + dz * i;
-
-            if (dx != 0) // E-W avenue: path extends along X, width along Z
-            {
-                await rcon.SendFillAsync(
-                    ax, BaseY, az - AvenueHalfWidth,
-                    ax, BaseY, az + AvenueHalfWidth,
-                    "minecraft:stone_bricks", ct);
-            }
-            else // N-S avenue: path extends along Z, width along X
-            {
-                await rcon.SendFillAsync(
-                    ax - AvenueHalfWidth, BaseY, az,
-                    ax + AvenueHalfWidth, BaseY, az,
-                    "minecraft:stone_bricks", ct);
-            }
+            int x1 = cx + dx * startOffset;
+            int x2 = cx + dx * endOffset;
+            await rcon.SendFillAsync(
+                Math.Min(x1, x2), BaseY, cz - AvenueHalfWidth,
+                Math.Max(x1, x2), BaseY, cz + AvenueHalfWidth,
+                "minecraft:stone_bricks", ct);
+        }
+        else // N-S avenue: path extends along Z, width along X
+        {
+            int z1 = cz + dz * startOffset;
+            int z2 = cz + dz * endOffset;
+            await rcon.SendFillAsync(
+                cx - AvenueHalfWidth, BaseY, Math.Min(z1, z2),
+                cx + AvenueHalfWidth, BaseY, Math.Max(z1, z2),
+                "minecraft:stone_bricks", ct);
         }
 
         // Trees, lanterns, benches, and flower beds every TreeSpacing blocks
+        // Collect decoration setblocks for batching
+        var decorBlocks = new List<(int x, int y, int z, string block)>();
         for (int i = startOffset + 4; i <= endOffset - 2; i += TreeSpacing)
         {
             int ax = cx + dx * i;
             int az = cz + dz * i;
 
-            // Tree positions on both sides of the avenue
             int treeOffset = AvenueHalfWidth + 1;
 
             if (dx != 0) // E-W avenue
             {
-                // Left side tree (negative Z side)
                 await GenerateTreeAsync(ax, az - treeOffset, ct);
-                await GenerateFlowerBedAsync(ax, az - treeOffset, ct);
-                // Right side tree (positive Z side)
                 await GenerateTreeAsync(ax, az + treeOffset, ct);
-                await GenerateFlowerBedAsync(ax, az + treeOffset, ct);
+                GenerateFlowerBedBlocks(ax, az - treeOffset, decorBlocks);
+                GenerateFlowerBedBlocks(ax, az + treeOffset, decorBlocks);
 
-                // Benches facing inward (stairs)
-                await rcon.SendSetBlockAsync(ax, BaseY + 1, az - AvenueHalfWidth,
-                    $"minecraft:stone_brick_stairs[{stairFacingLeft}]", ct);
-                await rcon.SendSetBlockAsync(ax, BaseY + 1, az + AvenueHalfWidth,
-                    $"minecraft:stone_brick_stairs[{stairFacingRight}]", ct);
+                decorBlocks.Add((ax, BaseY + 1, az - AvenueHalfWidth,
+                    $"minecraft:stone_brick_stairs[{stairFacingLeft}]"));
+                decorBlocks.Add((ax, BaseY + 1, az + AvenueHalfWidth,
+                    $"minecraft:stone_brick_stairs[{stairFacingRight}]"));
             }
             else // N-S avenue
             {
-                // Left side tree (negative X side)
                 await GenerateTreeAsync(ax - treeOffset, az, ct);
-                await GenerateFlowerBedAsync(ax - treeOffset, az, ct);
-                // Right side tree (positive X side)
                 await GenerateTreeAsync(ax + treeOffset, az, ct);
-                await GenerateFlowerBedAsync(ax + treeOffset, az, ct);
+                GenerateFlowerBedBlocks(ax - treeOffset, az, decorBlocks);
+                GenerateFlowerBedBlocks(ax + treeOffset, az, decorBlocks);
 
-                // Benches facing inward
-                await rcon.SendSetBlockAsync(ax - AvenueHalfWidth, BaseY + 1, az,
-                    $"minecraft:stone_brick_stairs[{stairFacingLeft}]", ct);
-                await rcon.SendSetBlockAsync(ax + AvenueHalfWidth, BaseY + 1, az,
-                    $"minecraft:stone_brick_stairs[{stairFacingRight}]", ct);
+                decorBlocks.Add((ax - AvenueHalfWidth, BaseY + 1, az,
+                    $"minecraft:stone_brick_stairs[{stairFacingLeft}]"));
+                decorBlocks.Add((ax + AvenueHalfWidth, BaseY + 1, az,
+                    $"minecraft:stone_brick_stairs[{stairFacingRight}]"));
             }
 
-            // Lanterns on fence posts between trees (halfway between tree positions)
+            // Lanterns on fence posts between trees
             int lanternOffset = i + TreeSpacing / 2;
             if (lanternOffset <= endOffset - 1)
             {
@@ -253,29 +246,23 @@ public sealed class CrossroadsGenerator(RconService rcon, ILogger<CrossroadsGene
 
                 if (dx != 0)
                 {
-                    // Fence post + lantern on both sides
-                    await rcon.SendSetBlockAsync(lx, BaseY + 1, lz - AvenueHalfWidth,
-                        "minecraft:oak_fence", ct);
-                    await rcon.SendSetBlockAsync(lx, BaseY + 2, lz - AvenueHalfWidth,
-                        "minecraft:lantern[hanging=false]", ct);
-                    await rcon.SendSetBlockAsync(lx, BaseY + 1, lz + AvenueHalfWidth,
-                        "minecraft:oak_fence", ct);
-                    await rcon.SendSetBlockAsync(lx, BaseY + 2, lz + AvenueHalfWidth,
-                        "minecraft:lantern[hanging=false]", ct);
+                    decorBlocks.Add((lx, BaseY + 1, lz - AvenueHalfWidth, "minecraft:oak_fence"));
+                    decorBlocks.Add((lx, BaseY + 2, lz - AvenueHalfWidth, "minecraft:lantern[hanging=false]"));
+                    decorBlocks.Add((lx, BaseY + 1, lz + AvenueHalfWidth, "minecraft:oak_fence"));
+                    decorBlocks.Add((lx, BaseY + 2, lz + AvenueHalfWidth, "minecraft:lantern[hanging=false]"));
                 }
                 else
                 {
-                    await rcon.SendSetBlockAsync(lx - AvenueHalfWidth, BaseY + 1, lz,
-                        "minecraft:oak_fence", ct);
-                    await rcon.SendSetBlockAsync(lx - AvenueHalfWidth, BaseY + 2, lz,
-                        "minecraft:lantern[hanging=false]", ct);
-                    await rcon.SendSetBlockAsync(lx + AvenueHalfWidth, BaseY + 1, lz,
-                        "minecraft:oak_fence", ct);
-                    await rcon.SendSetBlockAsync(lx + AvenueHalfWidth, BaseY + 2, lz,
-                        "minecraft:lantern[hanging=false]", ct);
+                    decorBlocks.Add((lx - AvenueHalfWidth, BaseY + 1, lz, "minecraft:oak_fence"));
+                    decorBlocks.Add((lx - AvenueHalfWidth, BaseY + 2, lz, "minecraft:lantern[hanging=false]"));
+                    decorBlocks.Add((lx + AvenueHalfWidth, BaseY + 1, lz, "minecraft:oak_fence"));
+                    decorBlocks.Add((lx + AvenueHalfWidth, BaseY + 2, lz, "minecraft:lantern[hanging=false]"));
                 }
             }
         }
+
+        if (decorBlocks.Count > 0)
+            await rcon.SendSetBlockBatchAsync(decorBlocks, ct);
     }
 
     /// <summary>
@@ -283,11 +270,8 @@ public sealed class CrossroadsGenerator(RconService rcon, ILogger<CrossroadsGene
     /// </summary>
     private async Task GenerateTreeAsync(int x, int z, CancellationToken ct)
     {
-        // Trunk: 4 blocks of oak log
-        for (int y = BaseY + 1; y <= BaseY + 4; y++)
-        {
-            await rcon.SendSetBlockAsync(x, y, z, "minecraft:oak_log", ct);
-        }
+        // Trunk: 4-block vertical fill instead of per-Y setblock
+        await rcon.SendFillAsync(x, BaseY + 1, z, x, BaseY + 4, z, "minecraft:oak_log", ct);
 
         // Leaf canopy: 3×3 at Y=-55 and Y=-54
         for (int ly = BaseY + 4; ly <= BaseY + 5; ly++)
@@ -303,18 +287,16 @@ public sealed class CrossroadsGenerator(RconService rcon, ILogger<CrossroadsGene
     }
 
     /// <summary>
-    /// Flower bed at tree bases: mixed tulips and poppies around the trunk.
+    /// Collects flower bed block positions into a batch list (no RCON calls).
     /// </summary>
-    private async Task GenerateFlowerBedAsync(int x, int z, CancellationToken ct)
+    private static void GenerateFlowerBedBlocks(int x, int z, List<(int x, int y, int z, string block)> blocks)
     {
         var flowers = new[] { "minecraft:red_tulip", "minecraft:poppy", "minecraft:orange_tulip", "minecraft:poppy" };
         var offsets = new (int dx, int dz)[] { (1, 0), (-1, 0), (0, 1), (0, -1) };
 
         for (int i = 0; i < offsets.Length; i++)
         {
-            await rcon.SendSetBlockAsync(
-                x + offsets[i].dx, BaseY + 1, z + offsets[i].dz,
-                flowers[i], ct);
+            blocks.Add((x + offsets[i].dx, BaseY + 1, z + offsets[i].dz, flowers[i]));
         }
     }
 
@@ -326,61 +308,56 @@ public sealed class CrossroadsGenerator(RconService rcon, ILogger<CrossroadsGene
     {
         logger.LogInformation("Generating {Count} radial station platform slots", StationSlots);
 
+        var slotFills = new List<(int x1, int y1, int z1, int x2, int y2, int z2, string block)>();
+        var slotSigns = new List<(int x, int y, int z, string block)>();
+
         for (int slot = 0; slot < StationSlots; slot++)
         {
             double angle = 2.0 * Math.PI * slot / StationSlots;
 
-            // Position on the plaza edge
             int edgeX = cx + (int)Math.Round(PlazaRadius * Math.Cos(angle));
             int edgeZ = cz + (int)Math.Round(PlazaRadius * Math.Sin(angle));
 
-            // Direction outward from center
             int dirX = Math.Sign(edgeX - cx);
             int dirZ = Math.Sign(edgeZ - cz);
 
-            // Determine platform orientation: extend outward from plaza edge
-            // Platform is 5 wide (perpendicular to radial) × 3 deep (along radial)
             if (Math.Abs(Math.Cos(angle)) > Math.Abs(Math.Sin(angle)))
             {
-                // Primarily E-W direction: platform extends along X, width along Z
                 for (int d = 0; d < 3; d++)
                 {
-                    await rcon.SendFillAsync(
-                        edgeX + dirX * d, BaseY, edgeZ - 2,
-                        edgeX + dirX * d, BaseY, edgeZ + 2,
-                        "minecraft:stone_bricks", ct);
+                    slotFills.Add((edgeX + dirX * d, BaseY, edgeZ - 2,
+                        edgeX + dirX * d, BaseY, edgeZ + 2, "minecraft:stone_bricks"));
                 }
 
-                // Slot number sign on outermost block
                 string facing = dirX > 0 ? "rotation=4" : "rotation=12";
-                await PlaceSlotSignAsync(edgeX + dirX * 2, edgeZ, facing, slot + 1, ct);
+                CollectSlotSign(edgeX + dirX * 2, edgeZ, facing, slot + 1, slotSigns);
             }
             else
             {
-                // Primarily N-S direction: platform extends along Z, width along X
                 for (int d = 0; d < 3; d++)
                 {
-                    await rcon.SendFillAsync(
-                        edgeX - 2, BaseY, edgeZ + dirZ * d,
-                        edgeX + 2, BaseY, edgeZ + dirZ * d,
-                        "minecraft:stone_bricks", ct);
+                    slotFills.Add((edgeX - 2, BaseY, edgeZ + dirZ * d,
+                        edgeX + 2, BaseY, edgeZ + dirZ * d, "minecraft:stone_bricks"));
                 }
 
-                // Slot number sign
                 string facing = dirZ > 0 ? "rotation=0" : "rotation=8";
-                await PlaceSlotSignAsync(edgeX, edgeZ + dirZ * 2, facing, slot + 1, ct);
+                CollectSlotSign(edgeX, edgeZ + dirZ * 2, facing, slot + 1, slotSigns);
             }
         }
+
+        await rcon.SendFillBatchAsync(slotFills, ct);
+        await rcon.SendSetBlockBatchAsync(slotSigns, ct);
     }
 
-    private async Task PlaceSlotSignAsync(int x, int z, string facing, int slotNumber, CancellationToken ct)
+    private static void CollectSlotSign(int x, int z, string facing, int slotNumber,
+        List<(int x, int y, int z, string block)> blocks)
     {
         var slotText = $"\"Slot {slotNumber}\"";
         var stationText = "\"Station\"";
         var emptyText = "\"\"";
 
-        await rcon.SendSetBlockAsync(x, BaseY + 1, z,
-            $"minecraft:oak_sign[{facing}]{{front_text:{{messages:['{stationText}','{slotText}','{emptyText}','{emptyText}']}}}}", ct);
+        blocks.Add((x, BaseY + 1, z,
+            $"minecraft:oak_sign[{facing}]{{front_text:{{messages:['{stationText}','{slotText}','{emptyText}','{emptyText}']}}}}"));
     }
 
     /// <summary>
@@ -395,35 +372,31 @@ public sealed class CrossroadsGenerator(RconService rcon, ILogger<CrossroadsGene
         var welcomeLine = "\"Welcome!\"";
         var emptyText = "\"\"";
 
-        // North entrance (facing south toward approaching players)
-        await rcon.SendSetBlockAsync(cx, BaseY + 1, cz - PlazaRadius - 1, "minecraft:oak_fence", ct);
-        await rcon.SendSetBlockAsync(cx, BaseY + 2, cz - PlazaRadius - 1,
-            $"minecraft:oak_sign[rotation=8]{{front_text:{{messages:['{welcomeLine}','{welcomeText}','{subtitleText}','{emptyText}']}}}}", ct);
+        var blocks = new List<(int x, int y, int z, string block)>
+        {
+            (cx, BaseY + 1, cz - PlazaRadius - 1, "minecraft:oak_fence"),
+            (cx, BaseY + 2, cz - PlazaRadius - 1,
+                $"minecraft:oak_sign[rotation=8]{{front_text:{{messages:['{welcomeLine}','{welcomeText}','{subtitleText}','{emptyText}']}}}}"),
+            (cx, BaseY + 1, cz + PlazaRadius + 1, "minecraft:oak_fence"),
+            (cx, BaseY + 2, cz + PlazaRadius + 1,
+                $"minecraft:oak_sign[rotation=0]{{front_text:{{messages:['{welcomeLine}','{welcomeText}','{subtitleText}','{emptyText}']}}}}"),
+            (cx + PlazaRadius + 1, BaseY + 1, cz, "minecraft:oak_fence"),
+            (cx + PlazaRadius + 1, BaseY + 2, cz,
+                $"minecraft:oak_sign[rotation=12]{{front_text:{{messages:['{welcomeLine}','{welcomeText}','{subtitleText}','{emptyText}']}}}}"),
+            (cx - PlazaRadius - 1, BaseY + 1, cz, "minecraft:oak_fence"),
+            (cx - PlazaRadius - 1, BaseY + 2, cz,
+                $"minecraft:oak_sign[rotation=4]{{front_text:{{messages:['{welcomeLine}','{welcomeText}','{subtitleText}','{emptyText}']}}}}")
+        };
 
-        // South entrance (facing north)
-        await rcon.SendSetBlockAsync(cx, BaseY + 1, cz + PlazaRadius + 1, "minecraft:oak_fence", ct);
-        await rcon.SendSetBlockAsync(cx, BaseY + 2, cz + PlazaRadius + 1,
-            $"minecraft:oak_sign[rotation=0]{{front_text:{{messages:['{welcomeLine}','{welcomeText}','{subtitleText}','{emptyText}']}}}}", ct);
-
-        // East entrance (facing west)
-        await rcon.SendSetBlockAsync(cx + PlazaRadius + 1, BaseY + 1, cz, "minecraft:oak_fence", ct);
-        await rcon.SendSetBlockAsync(cx + PlazaRadius + 1, BaseY + 2, cz,
-            $"minecraft:oak_sign[rotation=12]{{front_text:{{messages:['{welcomeLine}','{welcomeText}','{subtitleText}','{emptyText}']}}}}", ct);
-
-        // West entrance (facing east)
-        await rcon.SendSetBlockAsync(cx - PlazaRadius - 1, BaseY + 1, cz, "minecraft:oak_fence", ct);
-        await rcon.SendSetBlockAsync(cx - PlazaRadius - 1, BaseY + 2, cz,
-            $"minecraft:oak_sign[rotation=4]{{front_text:{{messages:['{welcomeLine}','{welcomeText}','{subtitleText}','{emptyText}']}}}}", ct);
+        await rcon.SendSetBlockBatchAsync(blocks, ct);
     }
 
-    /// <summary>
-    /// Decorative banners at key points around the plaza perimeter.
-    /// </summary>
     private async Task GenerateDecorativeBannersAsync(int cx, int cz, CancellationToken ct)
     {
         logger.LogInformation("Placing decorative banners");
 
-        // Banners at the four corners of the plaza on fence posts
+        var blocks = new List<(int x, int y, int z, string block)>();
+
         var corners = new (int x, int z)[]
         {
             (cx - PlazaRadius, cz - PlazaRadius),
@@ -434,12 +407,11 @@ public sealed class CrossroadsGenerator(RconService rcon, ILogger<CrossroadsGene
 
         foreach (var (x, z) in corners)
         {
-            await rcon.SendSetBlockAsync(x, BaseY + 1, z, "minecraft:oak_fence", ct);
-            await rcon.SendSetBlockAsync(x, BaseY + 2, z, "minecraft:oak_fence", ct);
-            await rcon.SendSetBlockAsync(x, BaseY + 3, z, "minecraft:blue_banner", ct);
+            blocks.Add((x, BaseY + 1, z, "minecraft:oak_fence"));
+            blocks.Add((x, BaseY + 2, z, "minecraft:oak_fence"));
+            blocks.Add((x, BaseY + 3, z, "minecraft:blue_banner"));
         }
 
-        // Additional banners at midpoints of each plaza edge
         var midpoints = new (int x, int z)[]
         {
             (cx, cz - PlazaRadius),
@@ -450,9 +422,11 @@ public sealed class CrossroadsGenerator(RconService rcon, ILogger<CrossroadsGene
 
         foreach (var (x, z) in midpoints)
         {
-            await rcon.SendSetBlockAsync(x, BaseY + 1, z, "minecraft:oak_fence", ct);
-            await rcon.SendSetBlockAsync(x, BaseY + 2, z, "minecraft:oak_fence", ct);
-            await rcon.SendSetBlockAsync(x, BaseY + 3, z, "minecraft:white_banner", ct);
+            blocks.Add((x, BaseY + 1, z, "minecraft:oak_fence"));
+            blocks.Add((x, BaseY + 2, z, "minecraft:oak_fence"));
+            blocks.Add((x, BaseY + 3, z, "minecraft:white_banner"));
         }
+
+        await rcon.SendSetBlockBatchAsync(blocks, ct);
     }
 }

@@ -177,27 +177,30 @@ public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator>
         int minZ = cz - PlazaRadius;
         int maxZ = cz + PlazaRadius;
 
-        // Corner glowstone (on top of walls)
-        await rcon.SendSetBlockAsync(minX, BaseY + WallHeight + 1, minZ, "minecraft:glowstone", ct);
-        await rcon.SendSetBlockAsync(maxX, BaseY + WallHeight + 1, minZ, "minecraft:glowstone", ct);
-        await rcon.SendSetBlockAsync(minX, BaseY + WallHeight + 1, maxZ, "minecraft:glowstone", ct);
-        await rcon.SendSetBlockAsync(maxX, BaseY + WallHeight + 1, maxZ, "minecraft:glowstone", ct);
+        var lights = new List<(int x, int y, int z, string block)>
+        {
+            // Corner glowstone (on top of walls)
+            (minX, BaseY + WallHeight + 1, minZ, "minecraft:glowstone"),
+            (maxX, BaseY + WallHeight + 1, minZ, "minecraft:glowstone"),
+            (minX, BaseY + WallHeight + 1, maxZ, "minecraft:glowstone"),
+            (maxX, BaseY + WallHeight + 1, maxZ, "minecraft:glowstone")
+        };
 
-        // Path lighting every 4 blocks along the cardinal paths (at ground level + 1)
+        // Path lighting every 4 blocks along the cardinal paths
         for (int offset = LightSpacing; offset <= PlazaRadius; offset += LightSpacing)
         {
-            // North-South path (along X = cx)
-            await rcon.SendSetBlockAsync(cx - 1, BaseY + 1, cz - offset, "minecraft:glowstone", ct);
-            await rcon.SendSetBlockAsync(cx + 1, BaseY + 1, cz - offset, "minecraft:glowstone", ct);
-            await rcon.SendSetBlockAsync(cx - 1, BaseY + 1, cz + offset, "minecraft:glowstone", ct);
-            await rcon.SendSetBlockAsync(cx + 1, BaseY + 1, cz + offset, "minecraft:glowstone", ct);
+            lights.Add((cx - 1, BaseY + 1, cz - offset, "minecraft:glowstone"));
+            lights.Add((cx + 1, BaseY + 1, cz - offset, "minecraft:glowstone"));
+            lights.Add((cx - 1, BaseY + 1, cz + offset, "minecraft:glowstone"));
+            lights.Add((cx + 1, BaseY + 1, cz + offset, "minecraft:glowstone"));
 
-            // East-West path (along Z = cz)
-            await rcon.SendSetBlockAsync(cx - offset, BaseY + 1, cz - 1, "minecraft:glowstone", ct);
-            await rcon.SendSetBlockAsync(cx + offset, BaseY + 1, cz - 1, "minecraft:glowstone", ct);
-            await rcon.SendSetBlockAsync(cx - offset, BaseY + 1, cz + 1, "minecraft:glowstone", ct);
-            await rcon.SendSetBlockAsync(cx + offset, BaseY + 1, cz + 1, "minecraft:glowstone", ct);
+            lights.Add((cx - offset, BaseY + 1, cz - 1, "minecraft:glowstone"));
+            lights.Add((cx + offset, BaseY + 1, cz - 1, "minecraft:glowstone"));
+            lights.Add((cx - offset, BaseY + 1, cz + 1, "minecraft:glowstone"));
+            lights.Add((cx + offset, BaseY + 1, cz + 1, "minecraft:glowstone"));
         }
+
+        await rcon.SendSetBlockBatchAsync(lights, ct);
     }
 
     /// <summary>
@@ -330,15 +333,18 @@ public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator>
         // East gate
         await rcon.SendFillAsync(maxX, BaseY + 1, cz - 1, maxX, BaseY + 1, cz + 1, "minecraft:oak_fence_gate[facing=east]", ct);
 
-        // Corner fence posts with lanterns for visibility
-        await rcon.SendSetBlockAsync(minX, BaseY + 1, minZ, "minecraft:oak_fence", ct);
-        await rcon.SendSetBlockAsync(maxX, BaseY + 1, minZ, "minecraft:oak_fence", ct);
-        await rcon.SendSetBlockAsync(minX, BaseY + 1, maxZ, "minecraft:oak_fence", ct);
-        await rcon.SendSetBlockAsync(maxX, BaseY + 1, maxZ, "minecraft:oak_fence", ct);
-
-        await rcon.SendSetBlockAsync(minX, BaseY + 2, minZ, "minecraft:lantern[hanging=false]", ct);
-        await rcon.SendSetBlockAsync(maxX, BaseY + 2, minZ, "minecraft:lantern[hanging=false]", ct);
-        await rcon.SendSetBlockAsync(minX, BaseY + 2, maxZ, "minecraft:lantern[hanging=false]", ct);
-        await rcon.SendSetBlockAsync(maxX, BaseY + 2, maxZ, "minecraft:lantern[hanging=false]", ct);
+        // Corner fence posts with lanterns for visibility — batched
+        var cornerBlocks = new List<(int x, int y, int z, string block)>
+        {
+            (minX, BaseY + 1, minZ, "minecraft:oak_fence"),
+            (maxX, BaseY + 1, minZ, "minecraft:oak_fence"),
+            (minX, BaseY + 1, maxZ, "minecraft:oak_fence"),
+            (maxX, BaseY + 1, maxZ, "minecraft:oak_fence"),
+            (minX, BaseY + 2, minZ, "minecraft:lantern[hanging=false]"),
+            (maxX, BaseY + 2, minZ, "minecraft:lantern[hanging=false]"),
+            (minX, BaseY + 2, maxZ, "minecraft:lantern[hanging=false]"),
+            (maxX, BaseY + 2, maxZ, "minecraft:lantern[hanging=false]")
+        };
+        await rcon.SendSetBlockBatchAsync(cornerBlocks, ct);
     }
 }
