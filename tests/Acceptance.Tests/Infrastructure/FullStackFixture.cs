@@ -1,6 +1,7 @@
 using System.Net;
 using Aspire.Hosting;
 using Aspire.Hosting.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Polly;
@@ -68,38 +69,63 @@ public sealed class FullStackFixture : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        // Create the distributed application from AppHost
-        var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.AppHost>();
+        using var startupCts = new CancellationTokenSource(StartupTimeout);
 
-        // Optionally configure logging
-        builder.Services.AddLogging(logging =>
+        try
         {
-            logging.SetMinimumLevel(LogLevel.Information);
-            logging.AddFilter("Aspire.Hosting", LogLevel.Warning);
-        });
+            var builder = await DistributedApplicationTestingBuilder.CreateAsync<Projects.AppHost>(
+                args: [],
+                cancellationToken: startupCts.Token);
 
-        _app = await builder.BuildAsync();
+            // Provide dummy values for required secret parameters so the
+            // AppHost builder doesn't hang waiting for interactive input.
+            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Parameters:discord-bot-token"] = "test-token-not-a-real-bot",
+                ["Parameters:rcon-password"] = "test-rcon-password",
+            });
 
-        // Start all resources
-        await _app.StartAsync();
+            builder.Services.AddLogging(logging =>
+            {
+                logging.SetMinimumLevel(LogLevel.Information);
+                logging.AddFilter("Aspire.Hosting", LogLevel.Warning);
+            });
 
-        // Get the endpoint URLs for Bridge.Api
-        var bridgeApiEndpoint = _app.GetEndpoint("bridge-api", "http");
-        BridgeApiBaseUrl = bridgeApiEndpoint.ToString();
-        _bridgeApiClient = new HttpClient { BaseAddress = new Uri(BridgeApiBaseUrl) };
+            _app = await builder.BuildAsync(startupCts.Token);
 
-        // Get the endpoint URL for BlueMap
-        var blueMapEndpoint = _app.GetEndpoint("minecraft", "bluemap");
-        BlueMapBaseUrl = blueMapEndpoint.ToString();
-        _blueMapClient = new HttpClient { BaseAddress = new Uri(BlueMapBaseUrl) };
+            Console.WriteLine("[FullStackFixture] Starting Aspire AppHost...");
+            await _app.StartAsync(startupCts.Token);
+            Console.WriteLine("[FullStackFixture] AppHost started");
 
-        // Get Redis connection
-        var redisConnStr = await _app.GetConnectionStringAsync("redis")
-            ?? throw new InvalidOperationException("Redis connection string not available");
-        _redis = await ConnectionMultiplexer.ConnectAsync(redisConnStr);
+            // Get the endpoint URLs for Bridge.Api
+            var bridgeApiEndpoint = _app.GetEndpoint("bridge-api", "http");
+            BridgeApiBaseUrl = bridgeApiEndpoint.ToString();
+            _bridgeApiClient = new HttpClient { BaseAddress = new Uri(BridgeApiBaseUrl) };
 
-        // Wait for BlueMap to be ready
-        await WaitForBlueMapReadyAsync();
+            // Get the endpoint URL for BlueMap
+            var blueMapEndpoint = _app.GetEndpoint("minecraft", "bluemap");
+            BlueMapBaseUrl = blueMapEndpoint.ToString();
+            _blueMapClient = new HttpClient { BaseAddress = new Uri(BlueMapBaseUrl) };
+
+            // Get Redis connection
+            var redisConnStr = await _app.GetConnectionStringAsync("redis")
+                ?? throw new InvalidOperationException("Redis connection string not available");
+            _redis = await ConnectionMultiplexer.ConnectAsync(redisConnStr);
+
+            // Wait for BlueMap to be ready
+            await WaitForBlueMapReadyAsync();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            Console.WriteLine($"[FullStackFixture] Startup failed: {ex}");
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            throw new TimeoutException(
+                $"FullStackFixture startup did not complete within {StartupTimeout}. " +
+                "Ensure Docker is running and containers can be pulled.");
+        }
     }
 
     /// <summary>
