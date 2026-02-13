@@ -56,18 +56,12 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
             dstStationZ = request.DestCenterZ + StationOffset;
         }
 
-        // Determine unique platform offset for source (village side)
-        int srcPlatformOffset = GetPlatformOffset(request.SourceCenterX, request.SourceCenterZ,
-            request.DestCenterX, request.DestCenterZ);
+        // Hub-and-spoke: each village has exactly one track to Crossroads,
+        // so no platform offset is needed — station is always at the village's expected position.
+        int srcPlatformZ = srcStationZ;
 
-        int srcPlatformZ = srcStationZ + srcPlatformOffset * (PlatformWidth + 3);
-
-        // Crossroads destination doesn't need platform offset — each village gets its own radial slot
         int dstPlatformX = dstStationX;
-        int dstPlatformZ = destIsCrossroads
-            ? dstStationZ
-            : dstStationZ + GetPlatformOffset(request.DestCenterX, request.DestCenterZ,
-                request.SourceCenterX, request.SourceCenterZ) * (PlatformWidth + 3);
+        int dstPlatformZ = dstStationZ;
 
         // Forceload all chunks along the track path before placing blocks
         await ForceloadTrackRegionAsync(srcStationX, srcPlatformZ, dstPlatformX, dstPlatformZ, add: true, ct);
@@ -115,19 +109,6 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
 
         string cmd = add ? "forceload add" : "forceload remove";
         await rcon.SendCommandAsync($"{cmd} {minChunkX << 4} {minChunkZ << 4} {maxChunkX << 4} {maxChunkZ << 4}", ct);
-    }
-
-    /// <summary>
-    /// Generates a deterministic platform offset index based on the direction to the destination.
-    /// Uses angle-based hashing so each destination gets a unique slot.
-    /// </summary>
-    private static int GetPlatformOffset(int fromX, int fromZ, int toX, int toZ)
-    {
-        double angle = Math.Atan2(toZ - fromZ, toX - fromX);
-        // Map angle [-PI, PI] to [0, 2PI], then to a slot index
-        if (angle < 0) angle += 2 * Math.PI;
-        int slot = (int)(angle / (2 * Math.PI) * 8); // up to 8 platform slots
-        return slot;
     }
 
     /// <summary>
@@ -269,30 +250,32 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
 
     /// <summary>
     /// Lays track between two station platforms using an L-shaped path.
-    /// Rails don't support diagonal placement. We use Z-first then X approach.
-    /// The corner block is where the two straight segments meet - it must see neighbors from both directions.
+    /// Rails don't support diagonal placement. We use X-first then Z approach:
+    /// the track exits the village station heading east/west (X direction) to avoid
+    /// crossing through the village plaza, then turns toward the destination along Z.
+    /// The corner at (dstX, srcZ) is far from both stations.
     /// </summary>
     private async Task GenerateTrackPathAsync(int srcX, int srcZ, int dstX, int dstZ, CancellationToken ct)
     {
         logger.LogInformation("Laying track path from ({SX},{SZ}) to ({DX},{DZ})",
             srcX, srcZ, dstX, dstZ);
 
-        // Simple L-shaped path: Z segment from source, X segment to destination, corner where they meet
-        // Corner is at (srcX, dstZ) - same X as source, same Z as dest
-        int cornerX = srcX;
-        int cornerZ = dstZ;
+        // L-shaped path: X segment from source, then Z segment to destination
+        // Corner at (dstX, srcZ) — same X as dest, same Z as source
+        int cornerX = dstX;
+        int cornerZ = srcZ;
 
-        // Segment 1: vertical (along Z axis) from source toward corner
-        // Goes from srcZ to cornerZ along X = srcX
+        // Segment 1: horizontal (along X axis) from source toward corner
+        // Goes from srcX to cornerX along Z = srcZ
         await LayRailSegmentAsync(srcX, srcZ, cornerX, cornerZ, ct);
 
-        // Segment 2: horizontal (along X axis) from corner to destination
-        // Goes from srcX to dstX along Z = dstZ
-        // IMPORTANT: Start one block PAST cornerX to avoid double-placing the corner rail
-        int startX = cornerX < dstX ? cornerX + 1 : cornerX - 1;
-        if (srcX != dstX) // Only needed if there's horizontal travel
+        // Segment 2: vertical (along Z axis) from corner to destination
+        // Goes from srcZ to dstZ along X = dstX
+        // Start one block past cornerZ to avoid double-placing the corner rail
+        int startZ = cornerZ < dstZ ? cornerZ + 1 : cornerZ - 1;
+        if (srcZ != dstZ) // Only needed if there's vertical travel
         {
-            await LayRailSegmentAsync(startX, dstZ, dstX, dstZ, ct);
+            await LayRailSegmentAsync(dstX, startZ, dstX, dstZ, ct);
         }
 
         // Place corner rail LAST so it detects neighbors and forms a curve
