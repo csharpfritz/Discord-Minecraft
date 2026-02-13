@@ -73,3 +73,6 @@
 📌 Change (2026-02-13): Removed generic villager NPCs (librarian, farmer, armorer) from VillageGenerator.SummonVillagersAsync — method deleted, call removed from AddAmbientDetailsAsync. Per Jeff's directive: Discord bots connected to the server will be represented as entities in a future iteration. Cats, dogs, farms, gardens, and lanterns remain as ambient life.
 
  Team update (2026-02-13): Player welcome pressure plate at (0, -59, 8) and lectern at (8, -59, 0)  avoid building anything at these Crossroads coords  decided by Oracle
+
+ Team update (2026-02-13): Dynamic building sizing (S5-08)  BuildingDimensions now parameterizes footprint/floors/walls/roof. Interior furnishing uses relative coordinates so it scales automatically. No action needed  confirmed by Gordon
+ Team update (2026-02-13): Discord Pins  Building Library (S5-03)  PinDisplayService places signs at signX=bx-5, signZ=bz+HalfFootprint-1. Avoid placing interior items at those positions  decided by Lucius

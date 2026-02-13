@@ -78,3 +78,5 @@
 - Lighting/window placement uses scaled ranges (torchRange, windowSpacing) derived from HalfFootprint rather than hardcoded offsets.
 - Staircase generation now loops over floor transitions (dim.Floors - 1) instead of hardcoding a single staircase.
 - SocketTextChannel.Users.Count provides the member count in Discord.NET 3.18.0 (no MemberCount property).
+
+ Team update (2026-02-13): Discord Pins  Building Library (S5-03)  POST /api/buildings/{id}/pin endpoint + PinDisplayService + Paper plugin lectern endpoint added  decided by Lucius

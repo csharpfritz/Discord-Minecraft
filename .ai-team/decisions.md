@@ -341,3 +341,42 @@ Changes applied across branches: `main`, `squad/10-bluemap`, `squad/1-paper-brid
 **What:** 5 E2E test scenarios in EndToEndScenarioTests.cs test the .NET service layer (Bridge.Api + Redis event consumer + WorldGen job queue) via HTTP API and Redis events, without depending on Minecraft RCON. Track job verification uses Crossroads API validation as fallback assertion (timing-sensitive). Building styles (MedievalCastle/TimberCottage/StoneWatchtower) are WorldGen-layer concepts not persisted in DB, so not verifiable via API.
 **Why:** Existing acceptance tests depend on BlueMap markers requiring full Minecraft + Paper MC + BlueMap stack  flaky in CI due to container startup times. Service-layer E2E tests validate same data flow with faster feedback.
 
+
+### 2026-02-13: Discord Pins to Building Library (S5-03)
+**By:** Lucius
+**What:**
+1. `POST /api/buildings/{id}/pin` endpoint accepts pin data and enqueues `UpdateBuilding` job via Redis.
+2. `UpdateBuildingJobPayload` in Bridge.Data/Jobs/ carries pin content + building coordinates.
+3. `PinDisplayService` places up to 6 preview signs on south interior wall (signX = bx-5, signZ = bz+HalfFootprint-1, Y = BaseY+2..+7) and a lectern with written book via Paper plugin HTTP API.
+4. Paper plugin `POST /plugin/lectern` endpoint places a lectern with a written book using Bukkit API on the main thread.
+5. Signs use `oak_wall_sign[facing=north]` at signX = bx-5 (away from existing floor signs at bx+3). Lectern at `(bx-5, BaseY+1, bz+HalfFootprint-3)`.
+6. PinDisplayService registered via `AddHttpClient<PinDisplayService>` with Plugin:BaseUrl, injected into WorldGenJobProcessor.
+
+**Why:** Pinned Discord messages need a physical representation inside buildings. Signs provide at-a-glance preview (6 signs × 60 chars = 360 chars max). Lectern with written book provides full content. Plugin HTTP API handles lectern because RCON `setblock` can't set book contents — Bukkit API with BookMeta is required. Sign positions chosen to avoid conflicts with existing interior furnishing (topic signs at bx-3, floor signs at bx+3).
+
+**Affects:** Bridge.Api (new endpoint), Bridge.Data (new payload), WorldGen.Worker (processor + service + DI), Paper plugin (new endpoint). Oracle/DiscordBot will need to call this endpoint when a message is pinned.
+
+### 2026-02-13: Dynamic Building Sizing (S5-08)
+**By:** Gordon
+**What:** Buildings now scale with Discord channel member count. Three tiers:
+- **Small** (<10 members): 15×15 footprint, 2 floors
+- **Medium** (10-30 members): 21×21 footprint, 3 floors (default, backward compatible)
+- **Large** (30+ members): 27×27 footprint, 4 floors
+
+Implementation:
+1. `BuildingSize` enum in `Bridge.Data` (Small/Medium/Large)
+2. `MemberCount` optional field (default 0) added to `BuildingJobPayload` and `BuildingGenerationRequest`
+3. `BuildingGenerator.DeriveSize(int memberCount)` static method for size derivation
+4. `BuildingDimensions` private record holds computed footprint/floors/wallTop/roofY per building
+5. All generation methods (walls, stairs, roof, windows, lighting, interiors) accept and use `BuildingDimensions`
+6. `DiscordBotWorker` passes `channel.Users.Count` through sync payload
+7. `Bridge.Api` sync endpoint passes `MemberCount` to `BuildingJobPayload`
+8. `WorldGenJobProcessor` passes `MemberCount` to `BuildingGenerationRequest`
+
+**Why:** Channels with more members deserve larger buildings. The tiered approach keeps the design predictable (only 3 sizes) while making villages visually reflect their Discord community. Optional defaults ensure full backward compatibility — existing buildings and any code paths that don't supply member count get Medium (the previous default behavior, now with 3 floors instead of 2).
+
+**Trade-offs:**
+- Medium now has 3 floors (was 2) — this is a deliberate upgrade. New medium buildings will be slightly taller than before.
+- Building spacing (24 blocks) is unchanged — Large buildings (27×27) extend 3 blocks further in each direction but still fit within the grid because the spacing was already generous.
+- Interior furnishing (Batgirl's code) uses relative coordinates from building edges, so it scales automatically. No hardcoded 21×21 assumptions.
+- Arrow slit positions, window spacing, and torch placement scale proportionally with `dim.HalfFootprint`.

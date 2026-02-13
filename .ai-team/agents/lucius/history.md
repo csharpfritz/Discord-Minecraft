@@ -88,3 +88,5 @@
 - Signs use `oak_wall_sign[facing=north]` with `front_text.messages` format (1.20+ plain text in double quotes). 4 lines × 15 chars per sign, up to 6 signs stacked at Y=BaseY+2 through BaseY+7.
 - Lectern fallback: if plugin HTTP call fails, places an empty lectern via RCON setblock.
 - Book pages: header page with author + timestamp, then content split into 256-char pages.
+
+ Team update (2026-02-13): Dynamic building sizing (S5-08)  BuildingSize enum, DeriveSize method, BuildingDimensions record, MemberCount flows through sync pipeline. Medium now 3 floors  decided by Gordon
