@@ -78,6 +78,68 @@
 
 ---
 
+## Sprint 4: World Polish & Player Experience
+
+**Goal:** Crossroads hub as the central spawn, hub-and-spoke track topology, building variety, player teleportation, BlueMap markers, and E2E test wiring. By sprint end, players spawn at Crossroads, see three medieval building styles, ride minecarts to any village, and use `/goto` to teleport to specific channels.
+
+| ID | Title | Description | Assigned | Size | Dependencies |
+|----|-------|-------------|----------|------|--------------|
+| S4-01 | Crossroads Hub Generation | Generate the central Crossroads hub at world origin (0,0): 61×61 checkerboard plaza, multi-tier fountain, four tree-lined avenues, welcome signs, banners, and world spawn point. Set `crossroads:ready` Redis key on completion so WorldGen Worker can begin processing village jobs. | Batgirl | L | — |
+| S4-02 | Hub-and-Spoke Track Topology | Replace O(n²) star track topology with hub-and-spoke: each village gets exactly one track to Crossroads. Radial station slot positioning at Crossroads hub (16 slots). Automatic track enqueue after village creation completes. | Batgirl | L | S4-01 |
+| S4-03 | Player Teleport /goto Command | Add `/goto <channel>` Discord slash command: Bridge API search endpoint (`/api/buildings/search`) + spawn coordinate endpoint (`/api/buildings/{id}/spawn`). Paper plugin `/goto` in-game command with HTTP API for teleportation. | Oracle | M | — |
+| S4-04 | Station Relocation Near Plaza | Move village station platforms from 30 blocks south to plaza edge (VillageStationOffset=17, PlazaInnerRadius+2). Update WorldConstants and track/station generators. Players should walk a short distance from plaza to station, not trek across empty terrain. | Batgirl | S | S4-02 |
+| S4-05 | Building Style Variety | Add three medieval building styles: MedievalCastle (stone brick, turrets), TimberCottage (oak/spruce frame, cozy), StoneWatchtower (cobblestone, narrow/tall). Style selected deterministically from channel ID. Each style has distinct wall materials, roofing, and entrance design. | Batgirl | L | — |
+| S4-06 | BlueMap Marker Wiring | Implement MarkerService in WorldGen Worker: HTTP calls to Paper Bridge Plugin's marker API (`/api/markers/village`, `/api/markers/building`). Best-effort marker placement after village/building generation. Archive markers on channel deletion. | Oracle | M | S4-01 |
+| S4-07 | E2E Smoke Tests Aspire Wiring | Build the Aspire-based full-stack test infrastructure: FullStackFixture that launches entire Aspire stack (Bridge API, Redis, PostgreSQL, Paper MC, WorldGen Worker), DiscordEventPublisher for simulating Discord events, BlueMapClient for validating markers. Acceptance.Tests project with xUnit + Aspire testing. | Nightwing | L | — |
+| S4-08 | Crossroads BlueMap & Discord Integration | Wire Crossroads info into Discord (`/crossroads` slash command with coordinates, status, BlueMap link) and Bridge API (`/api/crossroads` endpoint). Configure BlueMap web URL in Aspire AppHost. BlueMap deep-link URL format for Crossroads view. | Oracle | M | S4-01, S4-06 |
+
+**Post-Sprint 4 — RCON Performance Optimization (unplanned):**
+- Batch API: `SendBatchAsync` for multiple RCON commands in a single semaphore acquisition
+- Adaptive delay: 50ms→10ms base, min 5ms, exponential backoff on failure
+- Fill consolidation: ~7,100→~2,600 commands per village (6.5 min→~30 sec)
+- World broadcast messages: `tellraw @a` during build start/complete
+- Spawn-proximity priority queue: `PopClosestJobAsync` builds nearest-to-origin first
+
+**Sprint 4 Definition of Done:**
+- Players spawn at Crossroads hub with fountain, avenues, and welcome signs
+- Hub-and-spoke tracks connect each village to Crossroads (O(n) topology)
+- `/goto <channel>` teleports player to the correct building entrance
+- Three distinct building styles visible in the world
+- Village stations are near the plaza, not 30 blocks away
+- BlueMap markers appear for villages and buildings
+- `/crossroads` Discord command shows hub info with BlueMap link
+- Full-stack test infrastructure runs against real Aspire containers
+- ✅ All items completed
+
+---
+
+## Sprint 5: Immersion & Onboarding
+
+**Goal:** Make the world feel alive and welcoming. New players get guided into the experience, buildings have furnished interiors that reflect their Discord channels, the world has ambient life, and Discord↔Minecraft communication goes deeper. By sprint end, a player joining for the first time understands where they are and what to do, buildings feel inhabited rather than hollow, and the Discord community can interact with the Minecraft world in richer ways.
+
+| ID | Title | Description | Assigned | Size | Dependencies |
+|----|-------|-------------|----------|------|--------------|
+| S5-01 | Building Interior Furnishing | Buildings are currently hollow shells. Add furnished interiors based on building style: MedievalCastle gets throne room + armory + banquet table, TimberCottage gets hearth + bookshelves + beds, StoneWatchtower gets map table + brewing stands + observation deck. Each floor should have a distinct purpose. Use channel topic (if set) as a wall sign description on the ground floor. Extend `BuildingGenerator` with per-style interior methods. | Batgirl | L | — |
+| S5-02 | Player Welcome & Orientation | First-time experience when a player joins: title screen overlay ("Welcome to {GuildName}"), actionbar hint ("Stand on the golden pressure plate for a tour"), a golden pressure plate at Crossroads spawn that triggers a guided walkthrough via command blocks — explains villages, buildings, minecarts, and `/goto`. Add a Crossroads info kiosk (lectern with written_book containing world guide). Extend the Paper Bridge Plugin's player join handler. | Oracle | L | — |
+| S5-03 | Discord Pins → Building Library | Hybrid display for pinned Discord messages inside buildings. **Wall signs** (4-6 stacked on interior wall) show a headline/preview of the most recent pin (~240 chars across signs). **Lectern with written book** on the ground floor holds full pinned message history (up to 256 pages, ~50K chars). Bridge API endpoint `POST /api/buildings/{id}/pin` accepts pin data, enqueues an `UpdateBuilding` job. WorldGenJobProcessor handles the job: updates wall signs via RCON setblock with NBT text, updates lectern book via Paper plugin HTTP API (new endpoint `POST /plugin/lectern`). Max 6 preview signs + 1 lectern per building. | Lucius | M | S5-01 |
+| S5-04 | Village Ambient Life | Villages feel empty. Add ambient details during village generation: villager NPCs (2-3 per village, profession matches village theme), cats and dogs near buildings, crop farms on village outskirts (wheat, carrots, potatoes — 8×8 plots), flower gardens between buildings, and ambient lighting (lanterns on fence posts along walkways). Extend `VillageGenerator` with an `AddAmbientDetails` phase after plaza generation. | Batgirl | M | — |
+| S5-05 | E2E Test Scenarios | Carry-forward from #7. Write the actual end-to-end test scenarios using the S4-07 infrastructure: (1) Full guild sync → villages + buildings appear with correct styles, (2) Channel create → building generated + BlueMap marker set, (3) Channel delete → building archived + marker updated, (4) Track generation → hub-and-spoke verified, (5) `/goto` teleport flow. Target: 5 passing scenarios covering the core player-visible features. | Nightwing | L | — |
+| S5-06 | BlueMap Full Setup | Carry-forward from #10. Complete BlueMap integration: configure BlueMap JAR in Paper MC plugins directory via Aspire volume mount, expose BlueMap web server port (8200) through Aspire, verify map renders after world generation, add `/map` village deep-links (click village name → BlueMap zooms to that village). Document BlueMap setup in README. | Oracle | M | — |
+| S5-07 | World Activity Feed in Discord | Add a `#world-activity` Discord channel feed: post embeds when villages are built, buildings are constructed, tracks are laid, and players join/leave. Use Discord.NET's embed builder with color-coded borders (🟢 built, 🔴 archived, 🔵 player). WorldGen Worker publishes events to a `events:world:activity` Redis channel, Discord bot subscribes and posts. Rate-limit to max 1 embed per 5 seconds to avoid spam. | Lucius | M | — |
+| S5-08 | Dynamic Building Sizing | Buildings currently have a fixed 21×21 footprint regardless of channel size. Scale building footprint based on member count in the Discord channel: <10 members → Small (15×15, 2 floors), 10-30 → Medium (21×21, 3 floors, current default), 30+ → Large (27×27, 4 floors). Update `BuildingGenerator` to accept a size parameter. Sync endpoint passes member count. Existing buildings are not resized — only new buildings use dynamic sizing. | Gordon | M | S5-01 |
+
+**Sprint 5 Definition of Done:**
+- Buildings have style-appropriate furnished interiors (not hollow shells)
+- New players see a welcome screen and can find orientation info at Crossroads
+- Pinned Discord messages appear as signs inside the corresponding building
+- Villages have villagers, animals, farms, and ambient lighting
+- 5+ E2E test scenarios pass against real Aspire containers
+- BlueMap renders the world and is accessible via exposed port
+- Discord `#world-activity` channel receives live build notifications
+- Building size scales with Discord channel member count
+
+---
+
 ## Risk Register
 
 | Risk | Impact | Mitigation |
@@ -100,13 +162,16 @@
 
 ---
 
-## Beyond Sprint 3
+## Beyond Sprint 5
 
-Candidates for Sprint 4+:
+Candidates for future sprints:
+- Account linking (deferred from Sprint 3 — full `/link` flow with Redis TTL codes)
 - Real-time player position sync (show in-game players on a Discord embed)
 - Voice channel → proximity chat areas in Minecraft
 - Web admin dashboard
 - World backup automation
-- Multiple Discord server support
-- Building interior customization based on channel topic/description
-- Dynamic building sizing based on channel member count
+- Multiple Discord server support (Issue #11)
+- Monitoring website + multi-tenant architecture (Issue #11)
+- Building renovation on channel rename/topic change (re-generate signs, update markers)
+- Seasonal world events (holiday decorations, special structures)
+- Player stats & leaderboards (blocks placed, distance traveled)
