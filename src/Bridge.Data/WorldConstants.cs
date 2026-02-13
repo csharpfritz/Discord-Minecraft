@@ -2,7 +2,7 @@ namespace Bridge.Data;
 
 public static class WorldConstants
 {
-    public const int VillageSpacing = 500;
+    public const int VillageSpacing = 175;
     public const int GridColumns = 10;
     public const int BuildingFootprint = 21;
     public const int BuildingFloors = 2;

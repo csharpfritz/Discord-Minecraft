@@ -28,48 +28,52 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
         (HalfFootprint, HalfFootprint)    // SE
     ];
 
-    // Grid layout constants: each building footprint (21) + buffer (3+3) = 27 block spacing minimum
-    private const int GridSpacing = 27;
-    private const int GridColumns = 4; // 4x4 grid = 16 buildings max per village
-    private const int GridStartOffset = 50; // Start buildings 50 blocks from village center
+    // Linear "main street" layout: buildings in two rows facing each other across a central street
+    // Building footprint (21) + gap (3) = 24 block spacing between building centers along the street
+    private const int BuildingSpacing = 24; // footprint + 3-block gap between buildings
+    private const int StreetWidth = 10; // Space between the two rows of buildings (the "main street")
+    private const int StreetStartOffset = 30; // First building starts 30 blocks from village center
 
     public async Task GenerateAsync(BuildingGenerationRequest request, CancellationToken ct)
     {
         var cx = request.VillageCenterX;
         var cz = request.VillageCenterZ;
 
-        // Grid layout: 4x4 grid of buildings around the village center
-        // Each building has 3-block buffer on all sides (27 block centers)
-        int gridRow = request.BuildingIndex / GridColumns;
-        int gridCol = request.BuildingIndex % GridColumns;
+        // Main street layout: Two rows of buildings facing each other across a central street
+        // Row 0 (north side): buildings face south (entrance on south = +Z)
+        // Row 1 (south side): buildings face north (entrance on north = -Z)
+        // Buildings are placed in a linear row along the X axis
+        int row = request.BuildingIndex % 2; // 0 = north row, 1 = south row
+        int positionInRow = request.BuildingIndex / 2; // which building along the row
 
-        // Grid centered around the village with offset
-        int gridOffsetX = (gridCol - (GridColumns - 1) / 2.0) > 0
-            ? GridStartOffset + gridCol * GridSpacing
-            : -(GridStartOffset + (GridColumns - 1 - gridCol) * GridSpacing);
-        int gridOffsetZ = (gridRow - (GridColumns - 1) / 2.0) > 0
-            ? GridStartOffset + gridRow * GridSpacing
-            : -(GridStartOffset + (GridColumns - 1 - gridRow) * GridSpacing);
+        // X position: linear placement along the street, centered on village
+        int bx = cx + (positionInRow - 3) * BuildingSpacing; // Center 8 buildings (indices 0-7 per row)
 
-        // Simplified: place buildings in quadrants with proper spacing
-        int bx = cx + ((gridCol < 2) ? -(GridStartOffset + (1 - gridCol) * GridSpacing) : (GridStartOffset + (gridCol - 2) * GridSpacing));
-        int bz = cz + ((gridRow < 2) ? -(GridStartOffset + (1 - gridRow) * GridSpacing) : (GridStartOffset + (gridRow - 2) * GridSpacing));
+        // Z position: north or south side of the main street
+        int bz = row == 0
+            ? cz - StreetStartOffset - HalfFootprint // North row
+            : cz + StreetStartOffset + HalfFootprint; // South row
 
         logger.LogInformation(
             "Generating medieval castle '{Name}' at ({BX}, {BZ}), index {Index} in village at ({CX}, {CZ})",
             request.Name, bx, bz, request.BuildingIndex, cx, cz);
 
-        // Forceload chunks covering the building footprint before placing blocks
-        int minChunkX = (bx - HalfFootprint) >> 4;
-        int maxChunkX = (bx + HalfFootprint) >> 4;
-        int minChunkZ = (bz - HalfFootprint) >> 4;
-        int maxChunkZ = (bz + HalfFootprint) >> 4;
+        // Forceload chunks covering the building footprint AND walkway path
+        int pathMinX = Math.Min(bx - HalfFootprint, cx);
+        int pathMaxX = Math.Max(bx + HalfFootprint, cx);
+        int pathMinZ = Math.Min(bz - HalfFootprint, cz);
+        int pathMaxZ = Math.Max(bz + HalfFootprint + 2, cz);
+        int minChunkX = (pathMinX - 5) >> 4;
+        int maxChunkX = (pathMaxX + 5) >> 4;
+        int minChunkZ = (pathMinZ - 5) >> 4;
+        int maxChunkZ = (pathMaxZ + 5) >> 4;
         await rcon.SendCommandAsync($"forceload add {minChunkX << 4} {minChunkZ << 4} {maxChunkX << 4} {maxChunkZ << 4}", ct);
 
         // Block placement order is critical to avoid floating/erased blocks:
-        // 1. Foundation  2. Walls  3. Turrets  4. Clear interior
-        // 5. Floors  6. Stairs  7. Roof/parapet  8. Windows
-        // 9. Entrance  10. Lighting  11. Signs
+        // 1. Walkway  2. Foundation  3. Walls  4. Turrets  5. Clear interior
+        // 6. Floors  7. Stairs  8. Roof/parapet  9. Windows
+        // 10. Entrance  11. Lighting  12. Signs
+        await GenerateWalkwayAsync(cx, cz, bx, bz, ct);
         await GenerateFoundationAsync(bx, bz, ct);
         await GenerateWallsAsync(bx, bz, ct);
         await GenerateCornerTurretsAsync(bx, bz, ct);
@@ -86,6 +90,31 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
         await rcon.SendCommandAsync($"forceload remove {minChunkX << 4} {minChunkZ << 4} {maxChunkX << 4} {maxChunkZ << 4}", ct);
 
         logger.LogInformation("Medieval castle '{Name}' generation complete at ({BX}, {BZ})", request.Name, bx, bz);
+    }
+
+    /// <summary>
+    /// Cobblestone walkway from village center to building entrance.
+    /// Creates an L-shaped path: X direction first, then Z direction to the south entrance.
+    /// </summary>
+    private async Task GenerateWalkwayAsync(int cx, int cz, int bx, int bz, CancellationToken ct)
+    {
+        const int PathHalfWidth = 1; // 3-block wide path
+        int entranceZ = bz + HalfFootprint + 1; // Building entrance is on south face
+
+        logger.LogInformation("Generating cobblestone walkway from village center ({CX},{CZ}) to building ({BX},{BZ})", cx, cz, bx, bz);
+
+        // Horizontal segment (from center X toward building X)
+        if (bx != cx)
+        {
+            int minPathX = Math.Min(cx, bx);
+            int maxPathX = Math.Max(cx, bx);
+            await rcon.SendFillAsync(minPathX, BaseY, cz - PathHalfWidth, maxPathX, BaseY, cz + PathHalfWidth, "minecraft:cobblestone", ct);
+        }
+
+        // Vertical segment (from path at building X toward building entrance)
+        int minPathZ = Math.Min(cz, entranceZ);
+        int maxPathZ = Math.Max(cz, entranceZ);
+        await rcon.SendFillAsync(bx - PathHalfWidth, BaseY, minPathZ, bx + PathHalfWidth, BaseY, maxPathZ, "minecraft:cobblestone", ct);
     }
 
     /// <summary>21×21 cobblestone foundation slab at surface level</summary>
@@ -366,12 +395,11 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
         await rcon.SendSetBlockAsync(bx, BaseY + 5, maxZ + 1,
             $"minecraft:oak_wall_sign[facing=south]{{front_text:{{messages:['{castleText}','{nameText}',{emptyText},{emptyText}]}}}}", ct);
 
-        // Interior entrance sign — on south interior wall, attached to solid wall
-        int interiorSignZ = bz + HalfFootprint - 1;
-        await rcon.SendSetBlockAsync(bx, BaseY + 2, interiorSignZ,
-            $"minecraft:oak_wall_sign[facing=north]{{front_text:{{messages:[{emptyText},'{nameText}',{emptyText},{emptyText}]}}}}", ct);
+        // NOTE: Interior entrance sign REMOVED — it was floating in the doorway
+        // Keep only the exterior sign above the door and floor label signs on each level
 
         // Floor signs on each level — on south interior wall
+        int interiorSignZ = bz + HalfFootprint - 1;
         for (int floor = 0; floor < Floors; floor++)
         {
             int signY = BaseY + 2 + floor * FloorHeight;

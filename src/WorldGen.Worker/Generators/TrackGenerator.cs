@@ -229,6 +229,7 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
     /// Lays track between two station platforms using an L-shaped path with collision-safe offset.
     /// Rails don't support diagonal placement. Since stations run north-south, we go Z-first then X.
     /// The track path is offset by a hash of both station coordinates to minimize track collisions.
+    /// IMPORTANT: Rail segments MUST OVERLAP at corners for Minecraft rails to auto-connect into curves.
     /// </summary>
     private async Task GenerateTrackPathAsync(int srcX, int srcZ, int dstX, int dstZ, CancellationToken ct)
     {
@@ -244,16 +245,35 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
         int cornerX = srcX + trackOffset;
 
         // Segment 1: vertical (along Z axis) from source station going north/south
+        // EXTEND to cornerZ to reach the corner block
         await LayRailSegmentAsync(srcX, srcZ, srcX, cornerZ, ct);
 
         // Short connector from srcX to offset cornerX if needed
         if (trackOffset != 0)
         {
+            // This segment includes both srcX,cornerZ and cornerX,cornerZ
             await LayRailSegmentAsync(srcX, cornerZ, cornerX, cornerZ, ct);
         }
 
         // Segment 2: horizontal (along X axis) from corner to destination station
+        // START from cornerX (overlapping at the corner block) so the corner rail sees both directions
         await LayRailSegmentAsync(cornerX, cornerZ, dstX, dstZ, ct);
+
+        // Place corner rail LAST so it can detect neighbors from both directions
+        // This ensures Minecraft creates a curved rail at the L-shaped turn
+        await PlaceCornerRailAsync(cornerX, cornerZ, ct);
+    }
+
+    /// <summary>
+    /// Places the corner rail block, ensuring it detects neighbors and creates a curve.
+    /// Called AFTER both connecting segments are placed so the rail auto-orients correctly.
+    /// </summary>
+    private async Task PlaceCornerRailAsync(int x, int z, CancellationToken ct)
+    {
+        // Ensure trackbed exists at corner
+        await rcon.SendSetBlockAsync(x, TrackbedY, z, "minecraft:stone_bricks", ct);
+        // Place rail - it will auto-detect neighbors and form a curve
+        await rcon.SendSetBlockAsync(x, TrackY, z, "minecraft:rail", ct);
     }
 
     /// <summary>
