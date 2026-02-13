@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
 using WorldGen.Worker.Generators;
 using WorldGen.Worker.Models;
+using WorldGen.Worker.Services;
 
 namespace WorldGen.Worker;
 
@@ -16,6 +17,7 @@ public sealed class WorldGenJobProcessor(
     IBuildingGenerator buildingGenerator,
     IBuildingArchiver buildingArchiver,
     ITrackGenerator trackGenerator,
+    MarkerService markerService,
     ILogger<WorldGenJobProcessor> logger) : BackgroundService
 {
     private static readonly JsonSerializerOptions PayloadOptions = new(JsonSerializerDefaults.Web);
@@ -86,6 +88,9 @@ public sealed class WorldGenJobProcessor(
         try
         {
             await DispatchJobAsync(job, ct);
+
+            // Set BlueMap markers (best-effort, never fails the job)
+            await SetMarkersForJobAsync(job);
 
             genJob.Status = GenerationJobStatus.Completed;
             genJob.CompletedAt = DateTime.UtcNow;
@@ -217,8 +222,56 @@ public sealed class WorldGenJobProcessor(
     }
 
     /// <summary>
-    /// After a village is fully built, enqueue CreateTrack jobs connecting it to every other
-    /// non-archived village. The first village gets no tracks (no destinations yet).
+    /// Sets BlueMap markers after successful generation. Best-effort — never throws.
+    /// </summary>
+    private async Task SetMarkersForJobAsync(WorldGenJob job)
+    {
+        try
+        {
+            switch (job.JobType)
+            {
+                case WorldGenJobType.CreateVillage:
+                    var vp = JsonSerializer.Deserialize<VillageJobPayload>(job.Payload, PayloadOptions);
+                    if (vp is not null)
+                        await markerService.SetVillageMarkerAsync(
+                            vp.ChannelGroupId.ToString(), vp.VillageName, vp.CenterX, vp.CenterZ, CancellationToken.None);
+                    break;
+
+                case WorldGenJobType.CreateBuilding:
+                    var bp = JsonSerializer.Deserialize<BuildingJobPayload>(job.Payload, PayloadOptions);
+                    if (bp is not null)
+                    {
+                        // Compute building position matching BuildingGenerator layout
+                        int bx = bp.CenterX + (bp.BuildingIndex / 2 - 3) * 24;
+                        int bz = bp.BuildingIndex % 2 == 0 ? bp.CenterZ - 20 : bp.CenterZ + 20;
+                        await markerService.SetBuildingMarkerAsync(
+                            bp.ChannelId.ToString(), bp.ChannelName, bx, bz, CancellationToken.None);
+                    }
+                    break;
+
+                case WorldGenJobType.ArchiveBuilding:
+                    var abp = JsonSerializer.Deserialize<ArchiveBuildingJobPayload>(job.Payload, PayloadOptions);
+                    if (abp is not null)
+                        await markerService.ArchiveBuildingMarkerAsync(abp.ChannelId.ToString(), CancellationToken.None);
+                    break;
+
+                case WorldGenJobType.ArchiveVillage:
+                    var avp = JsonSerializer.Deserialize<ArchiveVillageJobPayload>(job.Payload, PayloadOptions);
+                    if (avp is not null)
+                        await markerService.ArchiveVillageMarkerAsync(avp.ChannelGroupId.ToString(), CancellationToken.None);
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to set BlueMap marker for job {JobId} — continuing", job.JobId);
+        }
+    }
+
+    /// <summary>
+    /// After a village is fully built, enqueue a single CreateTrack job connecting it
+    /// to the Crossroads hub at (0, 0). Hub-and-spoke topology: every village gets
+    /// exactly one track to Crossroads.
     /// </summary>
     private async Task EnqueueTrackJobsForNewVillageAsync(
         WorldGenJob completedJob, BridgeDbContext dbContext, IDatabase redisDb, CancellationToken ct)
@@ -226,58 +279,40 @@ public sealed class WorldGenJobProcessor(
         var villagePayload = JsonSerializer.Deserialize<VillageJobPayload>(completedJob.Payload, PayloadOptions)
             ?? throw new InvalidOperationException("Failed to deserialize VillageJobPayload for track routing");
 
-        var newGroupId = villagePayload.ChannelGroupId;
+        logger.LogInformation(
+            "Enqueuing hub-and-spoke track job connecting '{Name}' to Crossroads",
+            villagePayload.VillageName);
 
-        // Find all other non-archived villages
-        var existingVillages = await dbContext.ChannelGroups
-            .Where(g => g.Id != newGroupId && !g.IsArchived)
-            .ToListAsync(ct);
+        var trackPayload = new TrackJobPayload(
+            SourceChannelGroupId: villagePayload.ChannelGroupId,
+            DestinationChannelGroupId: 0, // Crossroads is not a ChannelGroup
+            SourceVillageName: villagePayload.VillageName,
+            DestinationVillageName: "Crossroads",
+            SourceCenterX: villagePayload.CenterX,
+            SourceCenterZ: villagePayload.CenterZ,
+            DestCenterX: 0,
+            DestCenterZ: 0);
 
-        if (existingVillages.Count == 0)
+        var genJob = new GenerationJob
         {
-            logger.LogInformation(
-                "Village '{Name}' is the first village \u2014 no track connections needed",
-                villagePayload.VillageName);
-            return;
-        }
+            Type = WorldGenJobType.CreateTrack.ToString(),
+            Payload = JsonSerializer.Serialize(trackPayload, PayloadOptions),
+            Status = GenerationJobStatus.Pending
+        };
+        dbContext.GenerationJobs.Add(genJob);
+        await dbContext.SaveChangesAsync(ct);
+
+        var worldGenJob = new WorldGenJob
+        {
+            JobType = WorldGenJobType.CreateTrack,
+            JobId = genJob.Id,
+            Payload = JsonSerializer.Serialize(trackPayload, PayloadOptions)
+        };
+        await redisDb.ListLeftPushAsync(RedisQueues.WorldGen, worldGenJob.ToJson());
 
         logger.LogInformation(
-            "Enqueuing {Count} track job(s) connecting '{Name}' to existing villages",
-            existingVillages.Count, villagePayload.VillageName);
-
-        foreach (var existing in existingVillages)
-        {
-            var trackPayload = new TrackJobPayload(
-                SourceChannelGroupId: newGroupId,
-                DestinationChannelGroupId: existing.Id,
-                SourceVillageName: villagePayload.VillageName,
-                DestinationVillageName: existing.Name,
-                SourceCenterX: villagePayload.CenterX,
-                SourceCenterZ: villagePayload.CenterZ,
-                DestCenterX: existing.CenterX,
-                DestCenterZ: existing.CenterZ);
-
-            var genJob = new GenerationJob
-            {
-                Type = WorldGenJobType.CreateTrack.ToString(),
-                Payload = JsonSerializer.Serialize(trackPayload, PayloadOptions),
-                Status = GenerationJobStatus.Pending
-            };
-            dbContext.GenerationJobs.Add(genJob);
-            await dbContext.SaveChangesAsync(ct);
-
-            var worldGenJob = new WorldGenJob
-            {
-                JobType = WorldGenJobType.CreateTrack,
-                JobId = genJob.Id,
-                Payload = JsonSerializer.Serialize(trackPayload, PayloadOptions)
-            };
-            await redisDb.ListLeftPushAsync(RedisQueues.WorldGen, worldGenJob.ToJson());
-
-            logger.LogInformation(
-                "Enqueued CreateTrack job {JobId}: '{Source}' \u2194 '{Dest}'",
-                genJob.Id, villagePayload.VillageName, existing.Name);
-        }
+            "Enqueued CreateTrack job {JobId}: '{Source}' \u2194 Crossroads",
+            genJob.Id, villagePayload.VillageName);
     }
 
     /// <summary>
