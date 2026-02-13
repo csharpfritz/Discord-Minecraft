@@ -42,6 +42,13 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
             "Generating medieval castle '{Name}' at ({BX}, {BZ}), index {Index} in village at ({CX}, {CZ})",
             request.Name, bx, bz, request.BuildingIndex, cx, cz);
 
+        // Forceload chunks covering the building footprint before placing blocks
+        int minChunkX = (bx - HalfFootprint) >> 4;
+        int maxChunkX = (bx + HalfFootprint) >> 4;
+        int minChunkZ = (bz - HalfFootprint) >> 4;
+        int maxChunkZ = (bz + HalfFootprint) >> 4;
+        await rcon.SendCommandAsync($"forceload add {minChunkX << 4} {minChunkZ << 4} {maxChunkX << 4} {maxChunkZ << 4}", ct);
+
         // Block placement order is critical to avoid floating/erased blocks:
         // 1. Foundation  2. Walls  3. Turrets  4. Clear interior
         // 5. Floors  6. Stairs  7. Roof/parapet  8. Windows
@@ -57,6 +64,9 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
         await GenerateEntranceAsync(bx, bz, ct);
         await GenerateLightingAsync(bx, bz, ct);
         await GenerateSignsAsync(bx, bz, request.Name, ct);
+
+        // Release forceloaded chunks
+        await rcon.SendCommandAsync($"forceload remove {minChunkX << 4} {minChunkZ << 4} {maxChunkX << 4} {maxChunkZ << 4}", ct);
 
         logger.LogInformation("Medieval castle '{Name}' generation complete at ({BX}, {BZ})", request.Name, bx, bz);
     }

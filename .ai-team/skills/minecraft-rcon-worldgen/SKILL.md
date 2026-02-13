@@ -1,6 +1,6 @@
 # SKILL: Minecraft RCON World Generation
 
-**Confidence:** medium
+**Confidence:** high
 **Source:** earned
 **Tags:** minecraft, rcon, world-generation, coreCRON
 
@@ -53,13 +53,16 @@ public sealed class RconService : IAsyncDisposable
 
 ## Key Details
 
-- Superflat world: y=64 is ground level
+- **ALWAYS forceload chunks before block placement** — see `minecraft-rcon-building` skill, section 5
+- Superflat world: y=-60 is ground level (bedrock at -64, dirt -63 to -61, grass -60)
 - CoreRCON constructor takes `IPAddress`, not hostname string — must resolve first
+- Filter for IPv4 addresses only (AddressFamily.InterNetwork) — IPv6 throws NotSupportedException
 - Rate limit RCON commands (50ms default) to avoid overwhelming Paper MC
 - Use `/fill` for large areas (floors, walls) — much faster than individual `/setblock`
 - Use `/setblock` for individual decorative blocks (signs, water, glowstone)
 - Single RCON connection with semaphore prevents connection pool exhaustion
 - Reset connection on failure and retry — RCON connections can drop
+- Wrap RCON.Dispose() in try-catch (SafeDisposeRcon) — throws if never connected
 
 ### Multi-Floor Building Construction Order
 

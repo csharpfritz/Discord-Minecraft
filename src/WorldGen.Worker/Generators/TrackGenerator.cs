@@ -6,8 +6,8 @@ namespace WorldGen.Worker.Generators;
 
 /// <summary>
 /// Generates minecart rail tracks between villages with station structures at each end.
-/// Tracks run at y=65 (slightly elevated) with powered rails every 8 blocks.
-/// Stations include departure platforms, destination signs, and button-activated minecart dispensers.
+/// Tracks run at Y=-59 (1 above superflat surface) with powered rails every 8 blocks.
+/// Stations include covered platforms with departure signs, destination maps, and minecart dispensers.
 /// </summary>
 public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> logger) : ITrackGenerator
 {
@@ -17,8 +17,8 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
     private const int StationOffset = 30; // station distance south of village center
 
     // Station platform dimensions
-    private const int PlatformLength = 7; // along track direction
-    private const int PlatformWidth = 3; // perpendicular to track
+    private const int PlatformLength = 9; // along track direction (expanded for shelter)
+    private const int PlatformWidth = 5; // perpendicular to track (wider for amenities)
 
     public async Task GenerateAsync(TrackGenerationRequest request, CancellationToken ct)
     {
@@ -39,22 +39,49 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
         int dstPlatformOffset = GetPlatformOffset(request.DestCenterX, request.DestCenterZ,
             request.SourceCenterX, request.SourceCenterZ);
 
-        int srcPlatformZ = srcStationZ + srcPlatformOffset * (PlatformWidth + 2);
-        int dstPlatformZ = dstStationZ + dstPlatformOffset * (PlatformWidth + 2);
+        int srcPlatformZ = srcStationZ + srcPlatformOffset * (PlatformWidth + 3);
+        int dstPlatformZ = dstStationZ + dstPlatformOffset * (PlatformWidth + 3);
+
+        // Forceload all chunks along the track path before placing blocks
+        // Tracks can span large distances — forceload in segments
+        await ForceloadTrackRegionAsync(srcStationX, srcPlatformZ, dstStationX, dstPlatformZ, add: true, ct);
 
         await GenerateStationPlatformAsync(srcStationX, srcPlatformZ,
-            request.DestinationVillageName, ct);
+            request.DestinationVillageName, request.SourceVillageName, ct);
         await GenerateStationPlatformAsync(dstStationX, dstPlatformZ,
-            request.SourceVillageName, ct);
+            request.SourceVillageName, request.DestinationVillageName, ct);
 
         await GenerateTrackPathAsync(
             srcStationX, srcPlatformZ,
             dstStationX, dstPlatformZ,
             ct);
 
+        // Release forceloaded chunks
+        await ForceloadTrackRegionAsync(srcStationX, srcPlatformZ, dstStationX, dstPlatformZ, add: false, ct);
+
         logger.LogInformation(
             "Track generation complete: '{Source}' \u2194 '{Dest}'",
             request.SourceVillageName, request.DestinationVillageName);
+    }
+
+    /// <summary>
+    /// Forceloads or releases chunks along the track path between two stations.
+    /// Uses bounding box approach — forceloads the rectangle covering both stations.
+    /// </summary>
+    private async Task ForceloadTrackRegionAsync(int x1, int z1, int x2, int z2, bool add, CancellationToken ct)
+    {
+        int minX = Math.Min(x1, x2) - PlatformLength;
+        int maxX = Math.Max(x1, x2) + PlatformLength;
+        int minZ = Math.Min(z1, z2) - PlatformWidth;
+        int maxZ = Math.Max(z1, z2) + PlatformWidth;
+
+        int minChunkX = minX >> 4;
+        int maxChunkX = maxX >> 4;
+        int minChunkZ = minZ >> 4;
+        int maxChunkZ = maxZ >> 4;
+
+        string cmd = add ? "forceload add" : "forceload remove";
+        await rcon.SendCommandAsync($"{cmd} {minChunkX << 4} {minChunkZ << 4} {maxChunkX << 4} {maxChunkZ << 4}", ct);
     }
 
     /// <summary>
@@ -71,106 +98,167 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
     }
 
     /// <summary>
-    /// Builds a departure platform with stone brick base, destination sign, and minecart dispenser.
-    /// Platform runs east-west (along X), 7 blocks long, 3 blocks wide.
+    /// Builds a covered station platform with stone brick base, oak shelter roof,
+    /// destination/arrival signs, minecart dispenser, and welcoming amenities.
+    /// Platform runs east-west (along X), 9 blocks long, 5 blocks wide.
     /// </summary>
-    private async Task GenerateStationPlatformAsync(int cx, int cz, string destinationName, CancellationToken ct)
+    private async Task GenerateStationPlatformAsync(int cx, int cz, string destinationName, string localVillageName, CancellationToken ct)
     {
         logger.LogInformation("Generating station platform at ({X},{Z}) for destination '{Dest}'",
             cx, cz, destinationName);
 
-        int halfLen = PlatformLength / 2; // 3
-        int halfWidth = PlatformWidth / 2; // 1
+        int halfLen = PlatformLength / 2; // 4
+        int halfWidth = PlatformWidth / 2; // 2
 
-        // Stone brick platform base
+        // 1. Foundation: Stone brick platform base
         await rcon.SendFillAsync(
             cx - halfLen, TrackbedY, cz - halfWidth,
             cx + halfLen, TrackbedY, cz + halfWidth,
             "minecraft:stone_bricks", ct);
 
-        // Clear air above platform (3 blocks high for player headroom)
+        // 2. Clear air above platform (5 blocks high for shelter structure)
         await rcon.SendFillAsync(
             cx - halfLen, TrackY, cz - halfWidth,
-            cx + halfLen, TrackY + 3, cz + halfWidth,
+            cx + halfLen, TrackY + 4, cz + halfWidth,
             "minecraft:air", ct);
 
-        // Rail track down the center of the platform
+        // 3. Rail track down the center of the platform (with trackbed)
         for (int x = cx - halfLen; x <= cx + halfLen; x++)
         {
             await rcon.SendSetBlockAsync(x, TrackbedY, cz, "minecraft:stone_bricks", ct);
             await rcon.SendSetBlockAsync(x, TrackY, cz, "minecraft:powered_rail[powered=true]", ct);
         }
 
-        // Stone brick slab edges on both sides of the track (platform walkway)
+        // 4. Stone brick slab walkways on both sides of the track
         await rcon.SendFillAsync(
             cx - halfLen, TrackY, cz - halfWidth,
-            cx + halfLen, TrackY, cz - halfWidth,
+            cx + halfLen, TrackY, cz - 1,
             "minecraft:stone_brick_slab", ct);
         await rcon.SendFillAsync(
-            cx - halfLen, TrackY, cz + halfWidth,
+            cx - halfLen, TrackY, cz + 1,
             cx + halfLen, TrackY, cz + halfWidth,
             "minecraft:stone_brick_slab", ct);
 
-        // Sign support blocks (signs need a solid block behind them)
+        // 5. Shelter structure: oak fence posts at corners
+        await rcon.SendFillAsync(cx - halfLen, TrackY, cz - halfWidth,
+            cx - halfLen, TrackY + 3, cz - halfWidth, "minecraft:oak_fence", ct);
+        await rcon.SendFillAsync(cx + halfLen, TrackY, cz - halfWidth,
+            cx + halfLen, TrackY + 3, cz - halfWidth, "minecraft:oak_fence", ct);
+        await rcon.SendFillAsync(cx - halfLen, TrackY, cz + halfWidth,
+            cx - halfLen, TrackY + 3, cz + halfWidth, "minecraft:oak_fence", ct);
+        await rcon.SendFillAsync(cx + halfLen, TrackY, cz + halfWidth,
+            cx + halfLen, TrackY + 3, cz + halfWidth, "minecraft:oak_fence", ct);
+
+        // 6. Shelter roof: oak slabs covering the platform
+        await rcon.SendFillAsync(
+            cx - halfLen, TrackY + 3, cz - halfWidth,
+            cx + halfLen, TrackY + 3, cz + halfWidth,
+            "minecraft:oak_slab[type=top]", ct);
+
+        // 7. Sign support blocks (need solid backing)
         await rcon.SendSetBlockAsync(cx - halfLen - 1, TrackY, cz, "minecraft:stone_bricks", ct);
         await rcon.SendSetBlockAsync(cx - halfLen - 1, TrackY + 1, cz, "minecraft:stone_bricks", ct);
+        await rcon.SendSetBlockAsync(cx - halfLen - 1, TrackY + 2, cz, "minecraft:stone_bricks", ct);
         await rcon.SendSetBlockAsync(cx + halfLen + 1, TrackY, cz, "minecraft:stone_bricks", ct);
         await rcon.SendSetBlockAsync(cx + halfLen + 1, TrackY + 1, cz, "minecraft:stone_bricks", ct);
+        await rcon.SendSetBlockAsync(cx + halfLen + 1, TrackY + 2, cz, "minecraft:stone_bricks", ct);
 
-        // Destination signs
+        // 8. Destination signs with village names
         var truncatedDest = destinationName.Length > 15 ? destinationName[..15] : destinationName;
+        var truncatedLocal = localVillageName.Length > 12 ? localVillageName[..12] : localVillageName;
         var destText = $"{{\"text\":\"{truncatedDest}\"}}";
+        var localText = $"{{\"text\":\"{truncatedLocal}\"}}";
         var arrowText = "{\"text\":\"\u2192\"}";
-        var stationText = "{\"text\":\"Station\"}";
-        var arrivedText = "{\"text\":\"Arrived\"}";
+        var stationText = "{\"text\":\"\\u00A7lStation\"}"; // Bold "Station"
+        var arrivedText = "{\"text\":\"\\u00A72Welcome!\"}"; // Green "Welcome!"
+        var fromText = $"{{\"text\":\"\\u00A77From: {truncatedLocal}\"}}"; // Gray "From:"
 
-        // Departure sign at west end
-        await rcon.SendSetBlockAsync(cx - halfLen - 1, TrackY + 1, cz,
-            $"minecraft:oak_wall_sign[facing=west]{{front_text:{{messages:['{stationText}','{arrowText}','{destText}','\"\"']}}}}", ct);
+        // Departure sign at west end (3 signs for better visibility)
+        await rcon.SendSetBlockAsync(cx - halfLen - 1, TrackY + 2, cz,
+            $"minecraft:oak_wall_sign[facing=east]{{front_text:{{messages:['{stationText}','{arrowText}','{destText}','\"\"']}}}}", ct);
 
         // Arrival sign at east end
-        await rcon.SendSetBlockAsync(cx + halfLen + 1, TrackY + 1, cz,
-            $"minecraft:oak_wall_sign[facing=east]{{front_text:{{messages:['{stationText}','{arrivedText}','{destText}','\"\"']}}}}", ct);
+        await rcon.SendSetBlockAsync(cx + halfLen + 1, TrackY + 2, cz,
+            $"minecraft:oak_wall_sign[facing=west]{{front_text:{{messages:['{arrivedText}','{localText}','{fromText}','\"\"']}}}}", ct);
 
-        // Button-activated minecart dispenser at west end
-        await rcon.SendSetBlockAsync(cx - halfLen, TrackbedY, cz - halfWidth,
+        // 9. Button-activated minecart dispenser with descriptive sign
+        await rcon.SendSetBlockAsync(cx - halfLen + 1, TrackbedY, cz - halfWidth + 1,
             "minecraft:dispenser[facing=up]", ct);
-
-        // Stone button on top of the dispenser
-        await rcon.SendSetBlockAsync(cx - halfLen, TrackY, cz - halfWidth,
+        await rcon.SendSetBlockAsync(cx - halfLen + 1, TrackY, cz - halfWidth + 1,
             "minecraft:stone_button[face=floor,facing=north]", ct);
 
-        // Load minecarts into the dispenser
+        // Load 64 minecarts into the dispenser
         await rcon.SendCommandAsync(
-            $"data merge block {cx - halfLen} {TrackbedY} {cz - halfWidth} " +
+            $"data merge block {cx - halfLen + 1} {TrackbedY} {cz - halfWidth + 1} " +
             "{Items:[{Slot:0b,id:\"minecraft:minecart\",count:64}]}", ct);
 
-        // Glowstone lighting at platform corners
-        await rcon.SendSetBlockAsync(cx - halfLen, TrackY + 2, cz - halfWidth, "minecraft:glowstone", ct);
-        await rcon.SendSetBlockAsync(cx + halfLen, TrackY + 2, cz - halfWidth, "minecraft:glowstone", ct);
-        await rcon.SendSetBlockAsync(cx - halfLen, TrackY + 2, cz + halfWidth, "minecraft:glowstone", ct);
-        await rcon.SendSetBlockAsync(cx + halfLen, TrackY + 2, cz + halfWidth, "minecraft:glowstone", ct);
+        // Dispenser instruction sign
+        await rcon.SendSetBlockAsync(cx - halfLen + 1, TrackY + 1, cz - halfWidth,
+            $"minecraft:oak_wall_sign[facing=south]{{front_text:{{messages:['\"\"','{{\"text\":\"Get Minecart\"}}','{{\"text\":\"Press Button\"}}','\"\"']}}}}", ct);
+
+        // 10. Glowstone lighting under the shelter roof (warm lighting)
+        await rcon.SendSetBlockAsync(cx - 2, TrackY + 2, cz - halfWidth + 1, "minecraft:lantern[hanging=true]", ct);
+        await rcon.SendSetBlockAsync(cx + 2, TrackY + 2, cz - halfWidth + 1, "minecraft:lantern[hanging=true]", ct);
+        await rcon.SendSetBlockAsync(cx - 2, TrackY + 2, cz + halfWidth - 1, "minecraft:lantern[hanging=true]", ct);
+        await rcon.SendSetBlockAsync(cx + 2, TrackY + 2, cz + halfWidth - 1, "minecraft:lantern[hanging=true]", ct);
+
+        // 11. Decorative benches (stairs facing inward) for waiting passengers
+        await rcon.SendSetBlockAsync(cx - 2, TrackY, cz - halfWidth + 1,
+            "minecraft:oak_stairs[facing=south]", ct);
+        await rcon.SendSetBlockAsync(cx + 2, TrackY, cz - halfWidth + 1,
+            "minecraft:oak_stairs[facing=south]", ct);
+        await rcon.SendSetBlockAsync(cx - 2, TrackY, cz + halfWidth - 1,
+            "minecraft:oak_stairs[facing=north]", ct);
+        await rcon.SendSetBlockAsync(cx + 2, TrackY, cz + halfWidth - 1,
+            "minecraft:oak_stairs[facing=north]", ct);
+
+        // 12. Flower pot decorations at shelter posts (welcoming touch)
+        await rcon.SendSetBlockAsync(cx - halfLen + 1, TrackY, cz - halfWidth,
+            "minecraft:potted_red_tulip", ct);
+        await rcon.SendSetBlockAsync(cx + halfLen - 1, TrackY, cz - halfWidth,
+            "minecraft:potted_blue_orchid", ct);
     }
 
     /// <summary>
-    /// Lays track between two station platforms using an L-shaped path.
+    /// Lays track between two station platforms using an L-shaped path with collision-safe offset.
     /// Rails don't support diagonal placement, so we go X-first then Z.
-    /// Powered rails every 8 blocks, with redstone blocks underneath for activation.
+    /// The track path is offset by a hash of both station coordinates to minimize track collisions.
     /// </summary>
     private async Task GenerateTrackPathAsync(int srcX, int srcZ, int dstX, int dstZ, CancellationToken ct)
     {
         logger.LogInformation("Laying track path from ({SX},{SZ}) to ({DX},{DZ})",
             srcX, srcZ, dstX, dstZ);
 
-        // L-shaped path: travel along X first, then along Z
+        // Calculate a track-specific Z offset to reduce collisions when tracks cross
+        // Different village pairs will use slightly different corner Z values
+        int trackOffset = GetTrackCornerOffset(srcX, srcZ, dstX, dstZ);
+
+        // L-shaped path: travel along X first (with offset), then along Z
         int cornerX = dstX;
-        int cornerZ = srcZ;
+        int cornerZ = srcZ + trackOffset;
 
         // Segment 1: horizontal (along X axis) from source to corner
-        await LayRailSegmentAsync(srcX, srcZ, cornerX, cornerZ, ct);
+        await LayRailSegmentAsync(srcX, srcZ, cornerX, srcZ, ct);
+
+        // Short connector from srcZ to offset cornerZ if needed
+        if (trackOffset != 0)
+        {
+            await LayRailSegmentAsync(cornerX, srcZ, cornerX, cornerZ, ct);
+        }
 
         // Segment 2: vertical (along Z axis) from corner to destination
         await LayRailSegmentAsync(cornerX, cornerZ, dstX, dstZ, ct);
+    }
+
+    /// <summary>
+    /// Generates a small offset (0-3 blocks) based on track endpoints to reduce track overlap.
+    /// Tracks between different village pairs will likely use different Z offsets at corners.
+    /// </summary>
+    private static int GetTrackCornerOffset(int srcX, int srcZ, int dstX, int dstZ)
+    {
+        // Simple hash of coordinates to produce 0-3 offset
+        int hash = Math.Abs(srcX ^ srcZ ^ dstX ^ dstZ);
+        return (hash % 4) - 2; // Range: -2 to +1
     }
 
     /// <summary>

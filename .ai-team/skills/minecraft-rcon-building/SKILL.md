@@ -1,12 +1,12 @@
 # SKILL: Minecraft RCON Building Construction
 
-**Confidence:** medium
+**Confidence:** high
 **Source:** earned
 **Tags:** minecraft, rcon, building, construction, coreCRON, aspire, docker
 
 ## What
 
-Everything the team has learned about constructing Minecraft structures via RCON commands — coordinate systems, CoreRCON connection patterns, block placement order, networking, and medieval castle design patterns.
+Everything the team has learned about constructing Minecraft structures via RCON commands — coordinate systems, CoreRCON connection patterns, chunk forceloading, block placement order, networking, and medieval castle design patterns.
 
 ## 1. Superflat World Coordinates
 
@@ -130,7 +130,64 @@ This order prevents floating blocks, vanishing floors, and other rendering bugs:
 - **Lighting floats:** Glowstone placed on ceilings gets destroyed when ClearInterior runs afterward. Use wall-mounted torches instead, placed AFTER interior is cleared.
 - **Signs need solid backing:** Wall signs placed before their support block exists will float or break. Always place signs LAST.
 
-## 5. Aspire/Docker Networking for RCON
+## 5. Chunk Forceloading (CRITICAL)
+
+**Minecraft silently ignores block placement in unloaded chunks.** This is the #1 cause of "floating blocks" bugs — decorations appear but walls/floors are missing because the `fill` commands ran in unloaded chunks.
+
+### The Problem
+
+- Minecraft only processes block commands in **loaded chunks**
+- Chunks load based on player proximity (view distance) or spawn chunks
+- Structures placed 60+ blocks from spawn may be in unloaded chunks
+- `fill` fails silently; `setblock` may briefly force-load a single chunk
+
+### The Solution
+
+Always **forceload chunks before block placement**, then release them after:
+
+```csharp
+// Before any block placement:
+int minChunkX = (bx - radius) >> 4;  // block coord → chunk coord (divide by 16)
+int maxChunkX = (bx + radius) >> 4;
+int minChunkZ = (bz - radius) >> 4;
+int maxChunkZ = (bz + radius) >> 4;
+
+// Forceload uses BLOCK coordinates for the corners
+await rcon.SendCommandAsync(
+    $"forceload add {minChunkX << 4} {minChunkZ << 4} {maxChunkX << 4} {maxChunkZ << 4}", ct);
+
+// ... do all block placement here ...
+
+// Release chunks when done
+await rcon.SendCommandAsync(
+    $"forceload remove {minChunkX << 4} {minChunkZ << 4} {maxChunkX << 4} {maxChunkZ << 4}", ct);
+```
+
+### Coordinate Conversion
+
+```
+Block coord → Chunk coord:  chunkX = blockX >> 4   (right-shift = floor divide by 16)
+Chunk coord → Block coord:  blockX = chunkX << 4   (left-shift = multiply by 16)
+```
+
+### Include Margin
+
+Always include the full structure footprint PLUS any decorations or paths:
+```csharp
+int radius = Footprint / 2 + extraMargin;  // e.g., 21/2 + 5 = 15
+```
+
+### For Long-Distance Tracks
+
+Forceload the entire bounding box between source and destination:
+```csharp
+int minX = Math.Min(srcX, dstX) - buffer;
+int maxX = Math.Max(srcX, dstX) + buffer;
+// ... same for Z
+await rcon.SendCommandAsync($"forceload add {minX} {minZ} {maxX} {maxZ}", ct);
+```
+
+## 6. Aspire/Docker Networking for RCON
 
 ### Port Mapping
 
@@ -159,7 +216,7 @@ await rcon.ConnectAsync();
 var result = await rcon.SendCommandAsync("seed");
 ```
 
-## 6. Medieval Castle Building Patterns
+## 7. Medieval Castle Building Patterns
 
 ### Block Palette
 

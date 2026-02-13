@@ -19,6 +19,14 @@ public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator>
         logger.LogInformation("Generating village '{Name}' at ({CenterX}, {CenterZ}), index {Index}",
             request.Name, cx, cz, request.VillageIndex);
 
+        // Forceload chunks covering the village plaza and paths before placing blocks
+        int radius = PlazaRadius + 10; // include welcome paths
+        int minChunkX = (cx - radius) >> 4;
+        int maxChunkX = (cx + radius) >> 4;
+        int minChunkZ = (cz - radius) >> 4;
+        int maxChunkZ = (cz + radius) >> 4;
+        await rcon.SendCommandAsync($"forceload add {minChunkX << 4} {minChunkZ << 4} {maxChunkX << 4} {maxChunkZ << 4}", ct);
+
         await GeneratePlatformAsync(cx, cz, ct);
         await GeneratePerimeterWallAsync(cx, cz, ct);
         await GenerateFountainAsync(cx, cz, ct);
@@ -26,12 +34,15 @@ public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator>
         await GenerateSignsAsync(cx, cz, request.Name, ct);
         await GenerateWelcomePathsAsync(cx, cz, ct);
 
+        // Release forceloaded chunks
+        await rcon.SendCommandAsync($"forceload remove {minChunkX << 4} {minChunkZ << 4} {maxChunkX << 4} {maxChunkZ << 4}", ct);
+
         logger.LogInformation("Village '{Name}' generation complete at ({CenterX}, {CenterZ})",
             request.Name, cx, cz);
     }
 
     /// <summary>
-    /// Stone brick platform: 31×31 at y=64
+    /// Stone brick platform: 31×31 at y=-60 (superflat surface level)
     /// </summary>
     private async Task GeneratePlatformAsync(int cx, int cz, CancellationToken ct)
     {
