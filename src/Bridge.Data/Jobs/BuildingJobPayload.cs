@@ -8,5 +8,6 @@ public sealed record BuildingJobPayload(
     int CenterX,
     int CenterZ,
     string ChannelName,
-    string VillageName
+    string VillageName,
+    string? ChannelTopic = null
 );

@@ -260,7 +260,8 @@ public sealed class DiscordEventConsumer(
                 Name = name,
                 DiscordId = channelDiscordId,
                 ChannelGroupId = group.Id,
-                BuildingIndex = buildingIndex
+                BuildingIndex = buildingIndex,
+                Topic = evt.Topic
             };
             db.Channels.Add(channel);
         }
@@ -274,7 +275,7 @@ public sealed class DiscordEventConsumer(
         // Create GenerationJob and enqueue
         var payload = new BuildingJobPayload(
             group.Id, channel.Id, group.VillageIndex, channel.BuildingIndex,
-            group.CenterX, group.CenterZ, channel.Name, group.Name);
+            group.CenterX, group.CenterZ, channel.Name, group.Name, channel.Topic);
 
         var job = new GenerationJob
         {
@@ -358,13 +359,14 @@ public sealed class DiscordEventConsumer(
         }
 
         channel.Name = newName;
+        channel.Topic = evt.Topic ?? channel.Topic;
         await db.SaveChangesAsync();
 
         // Enqueue UpdateBuilding job for sign updates
         var group = channel.ChannelGroup;
         var payload = new BuildingJobPayload(
             group.Id, channel.Id, group.VillageIndex, channel.BuildingIndex,
-            group.CenterX, group.CenterZ, channel.Name, group.Name);
+            group.CenterX, group.CenterZ, channel.Name, group.Name, channel.Topic);
 
         var job = new GenerationJob
         {

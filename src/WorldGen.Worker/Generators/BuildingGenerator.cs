@@ -72,13 +72,13 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
         switch (style)
         {
             case BuildingStyle.MedievalCastle:
-                await GenerateMedievalCastleAsync(bx, bz, request.Name, ct);
+                await GenerateMedievalCastleAsync(bx, bz, request.Name, request.ChannelTopic, ct);
                 break;
             case BuildingStyle.TimberCottage:
-                await GenerateTimberCottageAsync(bx, bz, request.Name, ct);
+                await GenerateTimberCottageAsync(bx, bz, request.Name, request.ChannelTopic, ct);
                 break;
             case BuildingStyle.StoneWatchtower:
-                await GenerateStoneWatchtowerAsync(bx, bz, request.Name, ct);
+                await GenerateStoneWatchtowerAsync(bx, bz, request.Name, request.ChannelTopic, ct);
                 break;
         }
 
@@ -189,7 +189,7 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
     /// Full medieval castle generation: cobblestone walls, stone brick trim,
     /// corner turrets, crenellated parapet, arrow slit windows, 3-wide staircase.
     /// </summary>
-    private async Task GenerateMedievalCastleAsync(int bx, int bz, string channelName, CancellationToken ct)
+    private async Task GenerateMedievalCastleAsync(int bx, int bz, string channelName, string? channelTopic, CancellationToken ct)
     {
         await GenerateFoundationAsync(bx, bz, "minecraft:cobblestone", ct);
         await GenerateCastleWallsAsync(bx, bz, ct);
@@ -202,6 +202,7 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
         await GenerateCastleEntranceAsync(bx, bz, ct);
         await GenerateCastleLightingAsync(bx, bz, ct);
         await GenerateSignsAsync(bx, bz, channelName, "Castle Keep", ct);
+        await GenerateCastleInteriorAsync(bx, bz, channelTopic, ct);
     }
 
     /// <summary>
@@ -416,7 +417,7 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
     /// Warm timber-frame cottage with oak log posts, birch plank infill,
     /// peaked A-frame dark oak roof, 2×2 glass pane windows, hanging lanterns.
     /// </summary>
-    private async Task GenerateTimberCottageAsync(int bx, int bz, string channelName, CancellationToken ct)
+    private async Task GenerateTimberCottageAsync(int bx, int bz, string channelName, string? channelTopic, CancellationToken ct)
     {
         await GenerateFoundationAsync(bx, bz, "minecraft:oak_planks", ct);
         await GenerateCottageWallsAsync(bx, bz, ct);
@@ -426,7 +427,7 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
         await GenerateCottageRoofAsync(bx, bz, ct);
         await GenerateCottageWindowsAsync(bx, bz, ct);
         await GenerateCottageEntranceAsync(bx, bz, ct);
-        await GenerateCottageInteriorAsync(bx, bz, ct);
+        await GenerateCottageInteriorAsync(bx, bz, channelTopic, ct);
         await GenerateCottageLightingAsync(bx, bz, ct);
         await GenerateSignsAsync(bx, bz, channelName, "Cottage", ct);
     }
@@ -599,16 +600,72 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
         await rcon.SendSetBlockAsync(bx + 1, BaseY + 3, maxZ, "minecraft:oak_planks", ct);
     }
 
-    /// <summary>Crafting table and furnace on ground floor</summary>
-    private async Task GenerateCottageInteriorAsync(int bx, int bz, CancellationToken ct)
+    /// <summary>
+    /// Furnished cottage interior:
+    /// Ground floor: hearth + kitchen (fireplace, cauldron, crafting table, furnace, barrel)
+    /// 2nd floor: study + bookshelves (desk, chair, bookshelves along walls)
+    /// Channel topic sign on ground floor if topic is set.
+    /// </summary>
+    private async Task GenerateCottageInteriorAsync(int bx, int bz, string? channelTopic, CancellationToken ct)
     {
-        int interiorMinX = bx - HalfFootprint + 2;
-        int interiorMinZ = bz - HalfFootprint + 2;
+        int minX = bx - HalfFootprint + 2;
+        int maxX = bx + HalfFootprint - 2;
+        int minZ = bz - HalfFootprint + 2;
+        int maxZ = bz + HalfFootprint - 2;
 
-        await rcon.SendSetBlockAsync(interiorMinX, BaseY + 1, interiorMinZ,
-            "minecraft:crafting_table", ct);
-        await rcon.SendSetBlockAsync(interiorMinX + 1, BaseY + 1, interiorMinZ,
-            "minecraft:furnace[facing=south]", ct);
+        // ── Ground floor: Hearth + Kitchen ──
+        int gy = BaseY + 1;
+
+        // Fireplace hearth in NW corner — campfire with chimney
+        var groundBlocks = new List<(int x, int y, int z, string block)>
+        {
+            (minX, gy, minZ, "minecraft:campfire[lit=true]"),
+            (minX, gy + 1, minZ, "minecraft:chain"),
+            // Kitchen items along north wall
+            (minX + 2, gy, minZ, "minecraft:crafting_table"),
+            (minX + 3, gy, minZ, "minecraft:furnace[facing=south]"),
+            (minX + 4, gy, minZ, "minecraft:smoker[facing=south]"),
+            (minX + 5, gy, minZ, "minecraft:barrel[facing=up]"),
+            // Dining area in center-west
+            (minX + 1, gy, bz - 1, "minecraft:oak_slab[type=bottom]"), // table
+            (minX + 2, gy, bz - 1, "minecraft:oak_slab[type=bottom]"),
+            (minX + 3, gy, bz - 1, "minecraft:oak_slab[type=bottom]"),
+            (minX + 1, gy, bz, "minecraft:oak_stairs[facing=north]"),  // chairs
+            (minX + 3, gy, bz, "minecraft:oak_stairs[facing=north]"),
+            // Cauldron near fireplace
+            (minX + 1, gy, minZ, "minecraft:cauldron"),
+        };
+        await rcon.SendSetBlockBatchAsync(groundBlocks, ct);
+
+        // ── 2nd floor: Study + Bookshelves ──
+        int sy = BaseY + FloorHeight + 1;
+
+        // Bookshelves along north wall
+        await rcon.SendFillAsync(minX, sy, minZ, minX + 6, sy + 2, minZ, "minecraft:bookshelf", ct);
+
+        // Bookshelves along west wall
+        await rcon.SendFillAsync(minX, sy, minZ + 1, minX, sy + 2, minZ + 4, "minecraft:bookshelf", ct);
+
+        var studyBlocks = new List<(int x, int y, int z, string block)>
+        {
+            // Writing desk + chair
+            (minX + 3, sy, minZ + 2, "minecraft:oak_slab[type=bottom]"), // desk
+            (minX + 4, sy, minZ + 2, "minecraft:oak_slab[type=bottom]"),
+            (minX + 3, sy, minZ + 3, "minecraft:oak_stairs[facing=north]"), // chair
+            // Lectern for reading
+            (minX + 6, sy, minZ + 2, "minecraft:lectern[facing=west]"),
+            // Flower pot for decoration
+            (minX + 2, sy, minZ + 1, "minecraft:flower_pot"),
+            // Beds along east wall
+            (maxX, sy, bz - 2, "minecraft:red_bed[facing=west,part=foot]"),
+            (maxX - 1, sy, bz - 2, "minecraft:red_bed[facing=west,part=head]"),
+            (maxX, sy, bz + 1, "minecraft:red_bed[facing=west,part=foot]"),
+            (maxX - 1, sy, bz + 1, "minecraft:red_bed[facing=west,part=head]"),
+        };
+        await rcon.SendSetBlockBatchAsync(studyBlocks, ct);
+
+        // Channel topic sign on ground floor wall
+        await PlaceTopicSignAsync(bx - 3, BaseY + 2, bz + HalfFootprint - 1, "north", channelTopic, ct);
     }
 
     /// <summary>Hanging lanterns from ceiling on each floor — batched</summary>
@@ -639,7 +696,7 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
     /// Imposing stone watchtower with stone brick walls, mossy base course,
     /// pyramid roof cap, lancet windows, corner buttresses, observation deck.
     /// </summary>
-    private async Task GenerateStoneWatchtowerAsync(int bx, int bz, string channelName, CancellationToken ct)
+    private async Task GenerateStoneWatchtowerAsync(int bx, int bz, string channelName, string? channelTopic, CancellationToken ct)
     {
         await GenerateFoundationAsync(bx, bz, "minecraft:stone_bricks", ct);
         await GenerateWatchtowerWallsAsync(bx, bz, ct);
@@ -652,6 +709,7 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
         await GenerateWatchtowerEntranceAsync(bx, bz, ct);
         await GenerateWatchtowerLightingAsync(bx, bz, ct);
         await GenerateSignsAsync(bx, bz, channelName, "Watchtower", ct);
+        await GenerateWatchtowerInteriorAsync(bx, bz, channelTopic, ct);
     }
 
     /// <summary>Stone brick walls with mossy stone brick base course.</summary>
@@ -874,5 +932,169 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
                 torches.Add((maxX, torchY, z, "minecraft:soul_wall_torch[facing=west]"));
         }
         await rcon.SendSetBlockBatchAsync(torches, ct);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  Interior furnishing (placed AFTER floors, stairs, lighting, signs)
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Places a wall sign with the channel topic text if set.
+    /// Placed on ground floor interior wall for context.
+    /// </summary>
+    private async Task PlaceTopicSignAsync(int x, int y, int z, string facing, string? topic, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(topic)) return;
+
+        // Truncate topic to fit on sign (15 chars per line, 2 usable lines)
+        var line1 = topic.Length > 15 ? topic[..15] : topic;
+        var line2 = topic.Length > 15 ? (topic.Length > 30 ? topic[15..30] : topic[15..]) : "";
+        var emptyText = "\"\"";
+
+        await rcon.SendSetBlockAsync(x, y, z,
+            $"minecraft:oak_wall_sign[facing={facing}]{{front_text:{{messages:['\"§oTopic\"','\"{line1}\"','\"{line2}\"',{emptyText}]}}}}", ct);
+    }
+
+    /// <summary>
+    /// Medieval Castle interior furnishing:
+    /// Ground floor: Throne room — throne (stairs), red carpet, banner displays
+    /// 2nd floor: Armory — armor stands, weapon racks (item frames), anvil
+    /// </summary>
+    private async Task GenerateCastleInteriorAsync(int bx, int bz, string? channelTopic, CancellationToken ct)
+    {
+        int minX = bx - HalfFootprint + 2;
+        int maxX = bx + HalfFootprint - 2;
+        int minZ = bz - HalfFootprint + 2;
+        int maxZ = bz + HalfFootprint - 2;
+
+        // ── Ground floor: Throne Room ──
+        int gy = BaseY + 1;
+
+        // Red carpet runner from entrance to throne (center aisle)
+        await rcon.SendFillAsync(bx - 1, gy, bz, bx + 1, gy, maxZ - 1, "minecraft:red_carpet", ct);
+
+        // Raised throne platform at north end
+        await rcon.SendFillAsync(bx - 2, gy, minZ, bx + 2, gy, minZ + 1, "minecraft:polished_andesite", ct);
+
+        var throneBlocks = new List<(int x, int y, int z, string block)>
+        {
+            // Throne chair (quartz stairs facing south, like a seat)
+            (bx, gy + 1, minZ, "minecraft:quartz_stairs[facing=south]"),
+            // Armrests
+            (bx - 1, gy + 1, minZ, "minecraft:stone_brick_wall"),
+            (bx + 1, gy + 1, minZ, "minecraft:stone_brick_wall"),
+            // Throne back
+            (bx, gy + 2, minZ, "minecraft:stone_brick_wall"),
+            // Banners flanking throne
+            (bx - 3, gy + 2, minZ, "minecraft:red_banner"),
+            (bx + 3, gy + 2, minZ, "minecraft:red_banner"),
+            // Banquet table along west wall
+            (minX, gy, bz - 2, "minecraft:oak_slab[type=bottom]"),
+            (minX, gy, bz - 1, "minecraft:oak_slab[type=bottom]"),
+            (minX, gy, bz, "minecraft:oak_slab[type=bottom]"),
+            (minX, gy, bz + 1, "minecraft:oak_slab[type=bottom]"),
+            (minX + 1, gy, bz - 2, "minecraft:oak_stairs[facing=west]"),
+            (minX + 1, gy, bz + 1, "minecraft:oak_stairs[facing=west]"),
+        };
+        await rcon.SendSetBlockBatchAsync(throneBlocks, ct);
+
+        // ── 2nd floor: Armory ──
+        int ay = BaseY + FloorHeight + 1;
+
+        var armoryBlocks = new List<(int x, int y, int z, string block)>
+        {
+            // Anvil for weapon smithing
+            (minX + 1, ay, minZ + 1, "minecraft:anvil[facing=south]"),
+            // Grindstone
+            (minX + 3, ay, minZ + 1, "minecraft:grindstone[facing=south]"),
+            // Smithing table
+            (minX + 5, ay, minZ + 1, "minecraft:smithing_table"),
+            // Armor stands (represented by armor stand entities placed via blocks)
+            // Use fence + stone button as visual stand
+            (maxX - 1, ay, minZ + 1, "minecraft:oak_fence"),
+            (maxX - 3, ay, minZ + 1, "minecraft:oak_fence"),
+            (maxX - 5, ay, minZ + 1, "minecraft:oak_fence"),
+            (maxX - 1, ay + 1, minZ + 1, "minecraft:stone_button[face=floor]"),
+            (maxX - 3, ay + 1, minZ + 1, "minecraft:stone_button[face=floor]"),
+            (maxX - 5, ay + 1, minZ + 1, "minecraft:stone_button[face=floor]"),
+            // Weapon rack (item frames need entities, use chains instead)
+            (minX, ay + 2, bz, "minecraft:chain"),
+            (minX, ay + 2, bz + 2, "minecraft:chain"),
+            (minX, ay + 2, bz - 2, "minecraft:chain"),
+            // Chest for storage
+            (maxX, ay, maxZ - 1, "minecraft:chest[facing=west]"),
+            (maxX, ay, maxZ - 2, "minecraft:chest[facing=west]"),
+        };
+        await rcon.SendSetBlockBatchAsync(armoryBlocks, ct);
+
+        // Channel topic sign
+        await PlaceTopicSignAsync(bx - 3, BaseY + 2, maxZ, "north", channelTopic, ct);
+    }
+
+    /// <summary>
+    /// Stone Watchtower interior furnishing:
+    /// Ground floor: Map/planning room — cartography table, lectern, map wall
+    /// 2nd floor: Brewing/supplies — brewing stands, cauldron, chests
+    /// </summary>
+    private async Task GenerateWatchtowerInteriorAsync(int bx, int bz, string? channelTopic, CancellationToken ct)
+    {
+        int minX = bx - HalfFootprint + 2;
+        int maxX = bx + HalfFootprint - 2;
+        int minZ = bz - HalfFootprint + 2;
+        int maxZ = bz + HalfFootprint - 2;
+
+        // ── Ground floor: Map/Planning Room ──
+        int gy = BaseY + 1;
+
+        // Central planning table (large oak slab table)
+        await rcon.SendFillAsync(bx - 2, gy, bz - 2, bx + 2, gy, bz + 2, "minecraft:oak_slab[type=bottom]", ct);
+
+        var planningBlocks = new List<(int x, int y, int z, string block)>
+        {
+            // Cartography table in NW
+            (minX, gy, minZ, "minecraft:cartography_table"),
+            // Lectern with commands
+            (minX + 2, gy, minZ, "minecraft:lectern[facing=south]"),
+            // Chairs around planning table
+            (bx - 3, gy, bz, "minecraft:oak_stairs[facing=east]"),
+            (bx + 3, gy, bz, "minecraft:oak_stairs[facing=west]"),
+            (bx, gy, bz - 3, "minecraft:oak_stairs[facing=south]"),
+            (bx, gy, bz + 3, "minecraft:oak_stairs[facing=north]"),
+            // Compass and clock display shelves
+            (maxX, gy, minZ, "minecraft:chiseled_bookshelf"),
+            (maxX, gy, minZ + 1, "minecraft:chiseled_bookshelf"),
+            // Supply barrels along west wall
+            (minX, gy, bz - 1, "minecraft:barrel[facing=east]"),
+            (minX, gy, bz + 1, "minecraft:barrel[facing=east]"),
+        };
+        await rcon.SendSetBlockBatchAsync(planningBlocks, ct);
+
+        // ── 2nd floor: Brewing + Supplies ──
+        int by = BaseY + FloorHeight + 1;
+
+        var brewingBlocks = new List<(int x, int y, int z, string block)>
+        {
+            // Brewing stands along north wall
+            (minX + 1, by, minZ, "minecraft:brewing_stand"),
+            (minX + 3, by, minZ, "minecraft:brewing_stand"),
+            // Cauldron for water
+            (minX + 5, by, minZ, "minecraft:water_cauldron[level=3]"),
+            // Supply chests along east wall
+            (maxX, by, minZ + 1, "minecraft:chest[facing=west]"),
+            (maxX, by, minZ + 3, "minecraft:chest[facing=west]"),
+            // Potion ingredient shelves
+            (minX, by, bz - 2, "minecraft:bookshelf"),
+            (minX, by, bz - 1, "minecraft:bookshelf"),
+            (minX, by + 1, bz - 2, "minecraft:bookshelf"),
+            (minX, by + 1, bz - 1, "minecraft:bookshelf"),
+            // Workbench
+            (minX + 2, by, bz + 2, "minecraft:crafting_table"),
+            // Soul campfire for atmosphere
+            (bx, by, bz, "minecraft:soul_campfire[lit=true]"),
+        };
+        await rcon.SendSetBlockBatchAsync(brewingBlocks, ct);
+
+        // Channel topic sign
+        await PlaceTopicSignAsync(bx - 3, BaseY + 2, maxZ, "north", channelTopic, ct);
     }
 }

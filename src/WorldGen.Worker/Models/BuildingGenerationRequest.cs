@@ -7,5 +7,6 @@ public record BuildingGenerationRequest(
     int VillageCenterX,
     int VillageCenterZ,
     int BuildingIndex,
-    string Name
+    string Name,
+    string? ChannelTopic = null
 );

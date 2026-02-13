@@ -22,6 +22,9 @@ public sealed record DiscordChannelEvent
     public string? ChannelGroupId { get; init; }
     public string? ChannelGroupName { get; init; }
 
+    // Channel topic (description)
+    public string? Topic { get; init; }
+
     // ChannelUpdated fields
     public string? OldName { get; init; }
     public string? NewName { get; init; }

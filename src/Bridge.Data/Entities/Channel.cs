@@ -11,6 +11,7 @@ public sealed class Channel
     public int CoordinateZ { get; set; }
     public int? BuildingX { get; set; }
     public int? BuildingZ { get; set; }
+    public string? Topic { get; set; }
     public bool IsArchived { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

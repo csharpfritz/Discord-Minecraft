@@ -161,7 +161,8 @@ public sealed class WorldGenJobProcessor(
                     VillageCenterX: buildingPayload.CenterX,
                     VillageCenterZ: buildingPayload.CenterZ,
                     BuildingIndex: buildingPayload.BuildingIndex,
-                    Name: buildingPayload.ChannelName);
+                    Name: buildingPayload.ChannelName,
+                    ChannelTopic: buildingPayload.ChannelTopic);
                 await buildingGenerator.GenerateAsync(buildingRequest, ct);
                 break;
 
