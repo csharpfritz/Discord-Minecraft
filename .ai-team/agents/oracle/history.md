@@ -57,3 +57,13 @@
 - **`GetJobCenter` extracts coordinates** from job payloads: `(CenterX, CenterZ)` for villages/buildings, `(SourceCenterX, SourceCenterZ)` for tracks. Returns `(int.MaxValue, int.MaxValue)` on failure so unknown jobs sort to end.
 - **Crossroads completion broadcast.** `CrossroadsInitializationService` now injects `RconService` and sends `tellraw @a` with gold ⭐ after successful hub generation. Same best-effort catch pattern.
 - **RconService already registered as singleton** in `Program.cs` — no DI registration changes needed. Primary constructor injection in both services.
+
+### Sprint 5 — Player Welcome & BlueMap (2026-02-13)
+
+- **S5-02 Player Welcome & Orientation.** `WelcomeListener.java` added to Bridge Plugin — handles `PlayerJoinEvent` with title overlay ("Welcome to {GuildName}") and actionbar hint ("Stand on golden pressure plate for a tour"). Pressure plate at Crossroads spawn (0, -59, 8) triggers 5-step walkthrough tour via Adventure title API: villages→buildings→minecarts→/goto→explore. Active walkthrough set prevents re-triggering. Delay-based sequencing using Bukkit `runTaskLater` (100-tick intervals = ~5 seconds per step).
+- **Golden pressure plate.** `CrossroadsGenerator.GenerateSpawnPressurePlateAsync` places `light_weighted_pressure_plate` on gold block platform 8 blocks south of Crossroads center. 5-block gold accent cross for visual distinction.
+- **Info kiosk.** `CrossroadsGenerator.GenerateInfoKioskAsync` places lectern with `written_book` 8 blocks east of center on quartz platform. Book has 5 pages (welcome, villages, buildings, minecarts, /goto) using `data merge block` RCON command with written_book_content component format.
+- **Guild name configurable** via `guild-name` in plugin `config.yml` (default "Discord World"). Read in `WelcomeListener` constructor from plugin config.
+- **S5-06 BlueMap Full Setup.** `/map` slash command extended with `village-name` string option. Village lookup queries `GET /api/villages` from Bridge API, fuzzy matches by name, constructs BlueMap deep-link URL with village center coordinates. Uses `DeferAsync()` pattern for the HTTP call path.
+- **BlueMap setup documented** in README.md — JAR download instructions, `webserver.conf` port config (8200), Aspire port mapping reference, marker set descriptions, command reference table.
+- **README sprint status updated** through Sprint 5, added Player Welcome & Orientation section.
