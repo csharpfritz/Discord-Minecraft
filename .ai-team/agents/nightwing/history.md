@@ -71,3 +71,6 @@
 - Negative tests verify: malformed JSON resilience, missing EventType, null fields, empty payloads, unknown event types, API 404 for non-existent resources
 - Concurrency tests verify: simultaneous village creation, parallel channel creation in same village, mixed create operations, high-volume event bursts (10+ channels)
 - Track routing tests verify: first village creates no tracks, second village triggers track to first, archived villages excluded from track network
+
+📌 Team update (2026-02-13): Village amenities — walkways, scalable fountains, interior sign fix — decided by Batgirl
+📌 Team update (2026-02-13): Crossroads hub + spawn + teleport consolidated — central hub at origin (0,0), hub-and-spoke track topology, /goto command, new acceptance tests needed — decided by Jeff, Gordon

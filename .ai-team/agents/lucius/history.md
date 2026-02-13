@@ -174,3 +174,6 @@
 - **Fix:** Changed `AppHost.cs` line 49 from `.WithEnvironment("Rcon__Host", minecraft.GetEndpoint("rcon"))` to `.WithEnvironment("Rcon__Host", "localhost")`. The worker now connects to `localhost:25675` (the host-mapped port), which Docker forwards to container port 25575.
 - **RconService.cs unchanged:** With `"localhost"` as the config value, `Uri.TryCreate("localhost", UriKind.Absolute, ...)` returns false, so the else branch sets `_host = "localhost"` and `_port = 25675` from `Rcon:Port` config. No URI parsing issues.
 - Key lesson: Aspire's `GetEndpoint()` returns Docker-network-internal URIs. For .NET projects running on the host (not as containers), pass explicit `localhost` + host-mapped port instead of using endpoint references.
+
+📌 Team update (2026-02-13): Village amenities — walkways, scalable fountains, interior sign fix — decided by Batgirl
+📌 Team update (2026-02-13): Crossroads hub + spawn + teleport consolidated — central hub at origin (0,0), hub-and-spoke track topology, /goto command, CrossroadsGenerator + CrossroadsInitializationService needed — decided by Jeff, Gordon

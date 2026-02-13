@@ -17,10 +17,10 @@
 **What:** Defined 3 sprints (Foundation, Core Features, Integration & Navigation) with 7 work items each, assigned to team members by expertise. Full details in `docs/sprints.md`.
 **Why:** Sprint 1 establishes the infrastructure so all subsequent work has a running environment. Sprint 2 delivers the core Discord→Minecraft pipeline. Sprint 3 adds player-facing features (account linking, navigation). This ordering minimizes blocked work items.
 
-### 2026-02-11: Channel deletion archives buildings, does not destroy them
-**By:** Gordon
-**What:** When a Discord channel is deleted, its corresponding Minecraft building is marked archived (signs updated, entrance blocked with barriers) but NOT demolished.
-**Why:** Destroying structures while players might be inside is dangerous. Archived buildings preserve world continuity and can be repurposed if channels are recreated. This is the safe default — we can add a `/demolish` admin command later if needed.
+### 2026-02-13: Channel deletion archives buildings via WorldGen job queue (consolidated)
+**By:** Gordon, Lucius, Nightwing
+**What:** When a Discord channel is deleted, its corresponding Minecraft building is marked archived — NOT demolished. Policy (Gordon): signs updated, entrance blocked with barriers, structures preserved for world continuity. Implementation (Lucius): channel/category deletion events enqueue `ArchiveBuilding`/`ArchiveVillage` jobs to the Redis worldgen queue (not just `IsArchived=true` in PostgreSQL). WorldGen Worker processes via `BuildingArchiver` — updates signs with red `[Archived]` prefix, blocks entrances with barrier blocks. Gap identified by Nightwing: prior implementation only set the DB flag without RCON commands. Test specs D-07 and D-08 document expected behavior.
+**Why:** Destroying structures while players are inside is dangerous. Archived buildings preserve continuity and can be repurposed. The job queue pattern keeps archival async and retryable, consistent with creation jobs. Without RCON commands, players would see no visual change in-game.
 
 ### 2026-02-11 → 2026-02-12: Account linking — designed then deferred
 **By:** Gordon (design), Jeffrey T. Fritz (deferral)
@@ -153,11 +153,6 @@
 8. **Ownership** — Oracle owns this item (squad:oracle label) since it spans Paper plugin integration and Discord bot commands.
 **Why:** BlueMap is the lightest integration path — it's a drop-in Paper plugin that auto-renders the world and exposes a marker API. No separate rendering service, no additional database, no custom web frontend. The superflat world renders cleanly. The HTTP endpoints exist because .NET services (which trigger village/building creation) need to notify the plugin to update markers. ConcurrentHashMap + restore-on-reload handles BlueMap's API lifecycle. Port mapping through Aspire keeps the web server discoverable without manual Docker config.
 
-### 2026-02-12: Channel deletion archives buildings via WorldGen job queue
-**By:** Lucius (implementation), Nightwing (gap identification)
-**What:** Channel and category deletion events now enqueue `ArchiveBuilding` and `ArchiveVillage` jobs to the Redis worldgen queue, rather than only marking `IsArchived=true` in PostgreSQL. The WorldGen Worker processes these jobs via a new `BuildingArchiver` that updates signs with a red `[Archived]` prefix and blocks entrances with barrier blocks. Structures are never destroyed. This resolves the gap identified by Nightwing: the prior implementation only set `IsArchived = true` in the DB without creating `GenerationJob` records or enqueuing Redis jobs for in-world sign updates or barrier placement. Test specs D-07 and D-08 document the expected behavior.
-**Why:** The original implementation only persisted the archived flag in the database but never communicated the archival to the Minecraft world. Without RCON commands, players would see no visual change in-game. The job queue pattern keeps the archival async and retryable, consistent with how village/building creation works. Barrier blocks prevent entry without destroying the structure, and red `[Archived]` signs make the status immediately visible.
-
 ### 2026-02-12: Sprint 3 test specs and channel deletion test architecture
 **By:** Nightwing
 **What:** Created comprehensive test specifications for all Sprint 3 features (Plugin, Tracks, Track Routing, Channel Deletion, Slash Commands, E2E) plus 14 concrete xUnit integration tests for channel deletion (S3-05) and 8 E2E smoke tests (S3-07). Tests reuse existing `BridgeApiFactory` infrastructure. Two tests are `Skip`-ped pending `/api/status` and `/api/navigate` endpoint implementation. Channel deletion tests validate archival idempotency, API response accuracy, building index continuity, null-coordinate handling, and rapid-fire event processing.
@@ -270,3 +265,19 @@ Changes applied across branches: `main`, `squad/10-bluemap`, `squad/1-paper-brid
 **By:** Oracle
 **What:** The `/unlink` Discord slash command is implemented as a stub that responds with "Account linking is not yet available" (ephemeral message). Command registered and handled, but simply informs the user the feature is coming.
 **Why:** Per the Sprint 3 decision to defer account linking. Provides better UX than an unrecognized command error, and the handler is ready to be filled in when account linking is implemented.
+
+### 2026-02-12: Village amenities and walkway system
+**By:** Batgirl
+**What:** Interior entrance signs removed (were floating in doorways). Cobblestone walkway system added — BuildingGenerator creates L-shaped 3-wide paths from village center to each building entrance; VillageGenerator creates perimeter walkway at FenceRadius-5. Scalable fountain: simple 3×3 basin (default) or 7×7 decorative fountain with center pillar + glowstone cap for 4+ buildings. Generation order: walkways BEFORE building foundation so foundation overwrites overlap cleanly.
+**Why:** Villages needed better infrastructure — floating signs, no walkways between buildings, fountain didn't scale, buildings felt disconnected from center.
+
+### 2026-02-13: Crossroads hub, spawn, and player teleport (consolidated)
+**By:** Jeff (via Copilot), Gordon
+**What:** Central "Crossroads of the World" hub at world origin (0, 0) — ornate with decorative fountains, trees lining streets, and Minecraft decorative elements. All village train lines connect here via hub-and-spoke topology (replaces point-to-point). Grid cell (0,0) reserved for Crossroads; villages start at grid position (1,0). Grand plaza 61×61 blocks, 15×15 multi-tier fountain, 4 tree-lined avenues, lampposts, benches, flower beds, banners, welcome signs. 16 radial platform slots (atan2 angle-based). New `CrossroadsGenerator` + `CrossroadsInitializationService` (BackgroundService, generates at startup). World spawn set to (0, -59, 0) via `/setworldspawn`. Player teleport via in-game `/goto <channel-name>` (Paper plugin, fuzzy match). New Bridge API endpoints: `GET /api/buildings/search`, `GET /api/buildings/{id}/spawn`. Plugin endpoint `POST /api/teleport`. Tab completion, 5s cooldown recommended. `/goto` works without account linking.
+**Why:** User request (Jeff) — creates a natural central spawn point, simplifies navigation (hub-and-spoke, 2 rides max between any villages), scalable track topology (N tracks vs N×(N-1)/2). Beautiful spawn experience for new players. `/goto` reuses existing Bridge API infrastructure with minimal new endpoints.
+
+### 2026-02-13: User directive — Train stations near plaza
+**By:** Jeff (via Copilot)
+**What:** Train stations should be positioned near the village plaza, not far away. The plaza is "village central" so the station should feel connected to it.
+**Why:** User request — improves village cohesion and makes the spawn/teleport experience better when players arrive at a village.
+

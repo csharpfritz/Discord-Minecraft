@@ -81,3 +81,6 @@
 📌 Fountain scaling added (2026-02-12): VillageGenerator fountain scales by building count — simple 3x3 basin (default) or 7x7 decorative fountain with center pillar + glowstone cap for villages with 4+ buildings. Large fountain at village center: 7x7 stone brick base, stone brick slab rim, 5x5 water pool, 3-tall center pillar capped with glowstone at BaseY+4.
 📌 Learning (2026-02-12): Walkways must be generated BEFORE building foundation — walkway placed first, then foundation overwrites any overlap, ensuring clean building edges while maintaining connected paths.
 📌 Learning (2026-02-12): Forceload area must cover walkway path extent (min/max of village center and building corners) not just building footprint — otherwise distant walkway segments fail silently.
+
+📌 Team update (2026-02-13): Crossroads hub + spawn + teleport consolidated — central hub at origin (0,0), hub-and-spoke track topology, /goto command, world spawn at (0,-59,0) — decided by Jeff, Gordon
+📌 Team update (2026-02-13): Train stations should be near village plaza, not far away — decided by Jeff
