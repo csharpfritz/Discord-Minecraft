@@ -90,15 +90,73 @@ This project is built by an AI development team, each member with a specialized 
 
 ## 📊 Project Status
 
-We are heading into **Sprint 3: Integration & Navigation** — account linking, minecart track generation, channel deletion handling, and end-to-end smoke tests.
-
-Track progress on the [Sprint 3 milestone](https://github.com/csharpfritz/Discord-Minecraft/milestone/1).
-
 | Sprint | Focus | Status |
 |--------|-------|--------|
 | Sprint 1 | Foundation — Aspire scaffolding, containers, bot shell | ✅ Complete |
 | Sprint 2 | Core Features — event pipeline, world generation | ✅ Complete |
-| Sprint 3 | Integration & Navigation — linking, tracks, polish | 🔄 In Progress |
+| Sprint 3 | Integration & Navigation — tracks, archival, BlueMap markers | ✅ Complete |
+| Sprint 4 | Hub & Polish — Crossroads hub, /goto, hub-and-spoke tracks | ✅ Complete |
+| Sprint 5 | Player Experience — welcome tour, BlueMap setup, kiosk | 🔄 In Progress |
+
+---
+
+## 🗺️ BlueMap Setup
+
+[BlueMap](https://bluemap.bluecolored.de/) provides an interactive 3D web map of the Minecraft world with Discord village/building markers.
+
+### Installation
+
+1. **Download BlueMap** — get the latest Paper plugin JAR from [BlueMap releases](https://github.com/BlueMap-Minecraft/BlueMap/releases) (choose the `bluemap-*-paper.jar` file).
+
+2. **Place the JAR** in the Minecraft server's `plugins/` directory:
+   ```
+   minecraft-data/plugins/BlueMap-*.jar
+   ```
+
+3. **First run** — start the server once. BlueMap will generate its default config files under `plugins/BlueMap/`.
+
+4. **Configure the web server** — edit `plugins/BlueMap/webserver.conf`:
+   ```hocon
+   enabled: true
+   port: 8200
+   ```
+
+5. **Aspire port mapping** — BlueMap's web server on port 8200 is already exposed in `AppHost.cs`:
+   ```csharp
+   .WithEndpoint(targetPort: 8200, port: 8200, name: "bluemap", scheme: "http")
+   ```
+
+6. **Configure secrets** — the Discord bot reads `BlueMap:BaseUrl` from the Aspire-injected `BlueMap__BaseUrl` environment variable. The Bridge API reads `BlueMap:WebUrl` for constructing deep-link URLs (default: `http://localhost:8200`).
+
+### Discord Commands
+
+| Command | Description |
+|---------|-------------|
+| `/map` | Returns the BlueMap web URL |
+| `/map channel:#general` | Deep-links to a specific channel's building marker |
+| `/map village-name:lobby` | Deep-links to a village's coordinates on the map |
+
+### Marker Sets
+
+The Bridge Plugin automatically manages two BlueMap marker sets via the BlueMap Java API:
+
+- **discord-villages** — POI markers for each village (channel category)
+- **discord-buildings** — POI markers for each building (channel)
+
+Markers are created/updated when villages and buildings are generated, and labeled `[Archived]` when channels are deleted.
+
+---
+
+## 🎉 Player Welcome & Orientation
+
+When a player joins the server, they receive:
+
+1. **Title overlay** — "Welcome to {Guild Name}" with a subtitle
+2. **Actionbar hint** — "Stand on the golden pressure plate for a tour"
+3. **Walkthrough tour** — stepping on the golden pressure plate at Crossroads spawn triggers a 5-step title sequence explaining villages, buildings, minecarts, and the `/goto` command
+4. **Info kiosk** — a lectern with a written book at the Crossroads plaza containing a full world guide
+
+The guild name is configurable in the Bridge Plugin's `config.yml` via the `guild-name` setting.
 
 ---
 

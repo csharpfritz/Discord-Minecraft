@@ -102,6 +102,8 @@ public class DiscordBotWorker(
             .WithDescription("Get a link to the interactive BlueMap web map")
             .AddOption("channel", ApplicationCommandOptionType.Channel,
                 "Deep-link to a specific channel's building on the map", isRequired: false)
+            .AddOption("village-name", ApplicationCommandOptionType.String,
+                "Deep-link to a specific village by name on the map", isRequired: false)
             .Build();
 
         var crossroadsCommand = new SlashCommandBuilder()
@@ -268,6 +270,8 @@ public class DiscordBotWorker(
         var blueMapBaseUrl = configuration["BlueMap:BaseUrl"] ?? "http://localhost:8200";
 
         var channelOption = command.Data.Options.FirstOrDefault(o => o.Name == "channel");
+        var villageOption = command.Data.Options.FirstOrDefault(o => o.Name == "village-name");
+
         if (channelOption?.Value is IChannel targetChannel)
         {
             // Deep-link to a specific building marker using the channel ID
@@ -275,12 +279,48 @@ public class DiscordBotWorker(
             await command.RespondAsync(
                 $"🗺️ **BlueMap** — Building for #{targetChannel.Name}:\n{deepLinkUrl}");
         }
+        else if (villageOption?.Value is string villageName && !string.IsNullOrWhiteSpace(villageName))
+        {
+            await command.DeferAsync();
+            try
+            {
+                var httpClient = httpClientFactory.CreateClient("BridgeApi");
+                var response = await httpClient.GetAsync("/api/villages");
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    await command.FollowupAsync("⚠️ Could not retrieve village data.");
+                    return;
+                }
+
+                var villages = await response.Content.ReadFromJsonAsync<List<VillageResponse>>();
+                var match = villages?.FirstOrDefault(v =>
+                    v.Name.Contains(villageName, StringComparison.OrdinalIgnoreCase));
+
+                if (match is null)
+                {
+                    await command.FollowupAsync($"📭 No village found matching \"{villageName}\".");
+                    return;
+                }
+
+                var deepLinkUrl = $"{blueMapBaseUrl}/#world:{match.CenterX}:{match.CenterZ}:0:100:0:0:0:0:flat";
+                await command.FollowupAsync(
+                    $"🗺️ **BlueMap** — Village **{match.Name}**:\n{deepLinkUrl}");
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to execute /map with village-name");
+                await command.FollowupAsync("⚠️ An error occurred while looking up the village.");
+            }
+        }
         else
         {
             await command.RespondAsync(
                 $"🗺️ **BlueMap** — Interactive world map:\n{blueMapBaseUrl}");
         }
     }
+
+    private record VillageResponse(int Id, string Name, string DiscordId, int CenterX, int CenterZ, int BuildingCount);
 
     private async Task HandleCrossroadsCommandAsync(SocketSlashCommand command)
     {
