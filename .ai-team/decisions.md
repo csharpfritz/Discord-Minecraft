@@ -270,3 +270,13 @@ Changes applied across branches: `main`, `squad/10-bluemap`, `squad/1-paper-brid
 **By:** Gordon
 **What:** Sprint 4: World & Experience — 8 work items focusing on the Crossroads hub, hub-and-spoke track topology, player teleport, village amenity improvements, E2E test completion, BlueMap marker wiring, and building variety. Account linking deferred again.
 **Why:** Sprint 3 delivered the core pipeline (Discord→villages→tracks→commands). Sprint 4 shifts focus to making the world feel alive and navigable. The Crossroads hub (Jeff's request) is the centerpiece — it creates a beautiful spawn point, simplifies navigation with hub-and-spoke topology, and anchors the player experience. Carrying forward #7 and #10 ensures we don't accumulate test and integration debt. Building variety and village amenities make the world visually distinctive. Account linking remains deferred per Jeff's original request — the `/goto` command provides teleportation without it.
+
+### 2026-02-13: Plugin HTTP port 8180 exposed via Aspire for marker wiring
+**By:** Oracle
+**What:** Bridge Plugin's HTTP API (port 8180) is now exposed as an Aspire endpoint (`plugin-http`) on the minecraft container. WorldGen.Worker receives `Plugin__BaseUrl` env var pointing to this endpoint, read as `Plugin:BaseUrl` in .NET config. `MarkerService` registered via `AddHttpClient<MarkerService>` with this base URL. All marker calls are best-effort (catch + log) — BlueMap markers are nice-to-have, never critical path.
+**Why:** The WorldGen.Worker needs to call the plugin's marker endpoints after generation completes. Using Aspire's `GetEndpoint()` + `WithEnvironment()` pattern keeps service discovery consistent with the rest of the system. Fire-and-forget pattern ensures generation jobs never fail due to marker issues.
+
+### 2026-02-13: /goto command uses Bridge API for building lookup
+**By:** Oracle
+**What:** The `/goto <channel-name>` in-game command queries the Bridge API (`/api/buildings/search` + `/api/buildings/{id}/spawn`) to find and teleport players to Discord channel buildings. No account linking required. Bridge API URL is configurable in the plugin's `config.yml` (`bridge-api-url`, default `http://localhost:5169`). Uses `java.net.http.HttpClient` (no external deps). 5-second cooldown prevents API spam.
+**Why:** Keeps coordinate calculation logic server-side in the .NET API (single source of truth matching BuildingGenerator layout). The plugin stays thin — just HTTP calls + teleport.
