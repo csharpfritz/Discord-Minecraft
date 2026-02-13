@@ -163,23 +163,24 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
         await rcon.SendSetBlockAsync(cx + halfLen + 1, TrackY + 1, cz, "minecraft:stone_bricks", ct);
         await rcon.SendSetBlockAsync(cx + halfLen + 1, TrackY + 2, cz, "minecraft:stone_bricks", ct);
 
-        // 8. Destination signs with village names
+        // 8. Destination signs with village names — plain quoted strings, NOT JSON objects
         var truncatedDest = destinationName.Length > 15 ? destinationName[..15] : destinationName;
         var truncatedLocal = localVillageName.Length > 12 ? localVillageName[..12] : localVillageName;
-        var destText = $"{{\"text\":\"{truncatedDest}\"}}";
-        var localText = $"{{\"text\":\"{truncatedLocal}\"}}";
-        var arrowText = "{\"text\":\"\u2192\"}";
-        var stationText = "{\"text\":\"\\u00A7lStation\"}"; // Bold "Station"
-        var arrivedText = "{\"text\":\"\\u00A72Welcome!\"}"; // Green "Welcome!"
-        var fromText = $"{{\"text\":\"\\u00A77From: {truncatedLocal}\"}}"; // Gray "From:"
+        var destText = $"\"{truncatedDest}\"";
+        var localText = $"\"{truncatedLocal}\"";
+        var arrowText = "\"→\"";
+        var stationText = "\"§lStation\""; // Bold "Station"
+        var arrivedText = "\"§2Welcome!\""; // Green "Welcome!"
+        var fromText = $"\"§7From: {truncatedLocal}\""; // Gray "From:"
+        var emptyText = "\"\"";
 
         // Departure sign at west end (3 signs for better visibility)
         await rcon.SendSetBlockAsync(cx - halfLen - 1, TrackY + 2, cz,
-            $"minecraft:oak_wall_sign[facing=east]{{front_text:{{messages:['{stationText}','{arrowText}','{destText}','\"\"']}}}}", ct);
+            $"minecraft:oak_wall_sign[facing=east]{{front_text:{{messages:['{stationText}','{arrowText}','{destText}',{emptyText}]}}}}", ct);
 
         // Arrival sign at east end
         await rcon.SendSetBlockAsync(cx + halfLen + 1, TrackY + 2, cz,
-            $"minecraft:oak_wall_sign[facing=west]{{front_text:{{messages:['{arrivedText}','{localText}','{fromText}','\"\"']}}}}", ct);
+            $"minecraft:oak_wall_sign[facing=west]{{front_text:{{messages:['{arrivedText}','{localText}','{fromText}',{emptyText}]}}}}", ct);
 
         // 9. Button-activated minecart dispenser with descriptive sign
         await rcon.SendSetBlockAsync(cx - halfLen + 1, TrackbedY, cz - halfWidth + 1,
@@ -193,8 +194,10 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
             "{Items:[{Slot:0b,id:\"minecraft:minecart\",count:64}]}", ct);
 
         // Dispenser instruction sign
+        var getCartText = "\"Get Minecart\"";
+        var pressText = "\"Press Button\"";
         await rcon.SendSetBlockAsync(cx - halfLen + 1, TrackY + 1, cz - halfWidth,
-            $"minecraft:oak_wall_sign[facing=south]{{front_text:{{messages:['\"\"','{{\"text\":\"Get Minecart\"}}','{{\"text\":\"Press Button\"}}','\"\"']}}}}", ct);
+            $"minecraft:oak_wall_sign[facing=south]{{front_text:{{messages:[{emptyText},'{getCartText}','{pressText}',{emptyText}]}}}}", ct);
 
         // 10. Glowstone lighting under the shelter roof (warm lighting)
         await rcon.SendSetBlockAsync(cx - 2, TrackY + 2, cz - halfWidth + 1, "minecraft:lantern[hanging=true]", ct);
