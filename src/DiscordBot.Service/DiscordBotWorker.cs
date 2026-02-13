@@ -104,13 +104,19 @@ public class DiscordBotWorker(
                 "Deep-link to a specific channel's building on the map", isRequired: false)
             .Build();
 
+        var unlinkCommand = new SlashCommandBuilder()
+            .WithName("unlink")
+            .WithDescription("Remove your Discord-Minecraft account link")
+            .Build();
+
         try
         {
             await client.CreateGlobalApplicationCommandAsync(pingCommand);
             await client.CreateGlobalApplicationCommandAsync(statusCommand);
             await client.CreateGlobalApplicationCommandAsync(navigateCommand);
             await client.CreateGlobalApplicationCommandAsync(mapCommand);
-            logger.LogInformation("Registered slash commands: /ping, /status, /navigate, /map");
+            await client.CreateGlobalApplicationCommandAsync(unlinkCommand);
+            logger.LogInformation("Registered slash commands: /ping, /status, /navigate, /map, /unlink");
         }
         catch (Exception ex)
         {
@@ -133,6 +139,9 @@ public class DiscordBotWorker(
                 break;
             case "map":
                 await HandleMapCommandAsync(command);
+                break;
+            case "unlink":
+                await HandleUnlinkCommandAsync(command);
                 break;
         }
     }
@@ -262,6 +271,14 @@ public class DiscordBotWorker(
             await command.RespondAsync(
                 $"🗺️ **BlueMap** — Interactive world map:\n{blueMapBaseUrl}");
         }
+    }
+
+    private async Task HandleUnlinkCommandAsync(SocketSlashCommand command)
+    {
+        // Account linking was deferred — stub response per Sprint 3 decisions
+        await command.RespondAsync(
+            "🔗 Account linking is not yet available. This feature is coming in a future update!",
+            ephemeral: true);
     }
 
     private async Task HandleChannelCreatedAsync(SocketChannel channel)

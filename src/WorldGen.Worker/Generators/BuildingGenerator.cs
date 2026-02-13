@@ -28,15 +28,32 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
         (HalfFootprint, HalfFootprint)    // SE
     ];
 
+    // Grid layout constants: each building footprint (21) + buffer (3+3) = 27 block spacing minimum
+    private const int GridSpacing = 27;
+    private const int GridColumns = 4; // 4x4 grid = 16 buildings max per village
+    private const int GridStartOffset = 50; // Start buildings 50 blocks from village center
+
     public async Task GenerateAsync(BuildingGenerationRequest request, CancellationToken ct)
     {
         var cx = request.VillageCenterX;
         var cz = request.VillageCenterZ;
 
-        // Building center is computed from ring layout
-        double angleRad = request.BuildingIndex * (360.0 / 16) * Math.PI / 180.0;
-        int bx = cx + (int)(60 * Math.Cos(angleRad));
-        int bz = cz + (int)(60 * Math.Sin(angleRad));
+        // Grid layout: 4x4 grid of buildings around the village center
+        // Each building has 3-block buffer on all sides (27 block centers)
+        int gridRow = request.BuildingIndex / GridColumns;
+        int gridCol = request.BuildingIndex % GridColumns;
+
+        // Grid centered around the village with offset
+        int gridOffsetX = (gridCol - (GridColumns - 1) / 2.0) > 0
+            ? GridStartOffset + gridCol * GridSpacing
+            : -(GridStartOffset + (GridColumns - 1 - gridCol) * GridSpacing);
+        int gridOffsetZ = (gridRow - (GridColumns - 1) / 2.0) > 0
+            ? GridStartOffset + gridRow * GridSpacing
+            : -(GridStartOffset + (GridColumns - 1 - gridRow) * GridSpacing);
+
+        // Simplified: place buildings in quadrants with proper spacing
+        int bx = cx + ((gridCol < 2) ? -(GridStartOffset + (1 - gridCol) * GridSpacing) : (GridStartOffset + (gridCol - 2) * GridSpacing));
+        int bz = cz + ((gridRow < 2) ? -(GridStartOffset + (1 - gridRow) * GridSpacing) : (GridStartOffset + (gridRow - 2) * GridSpacing));
 
         logger.LogInformation(
             "Generating medieval castle '{Name}' at ({BX}, {BZ}), index {Index} in village at ({CX}, {CZ})",
@@ -329,26 +346,30 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
 
     /// <summary>
     /// Signs placed LAST so they attach to solid wall blocks.
-    /// Entrance sign outside above doorway, channel name sign inside entrance,
-    /// and floor label signs on each floor.
+    /// Entrance sign OUTSIDE above doorway (facing south toward approaching players),
+    /// channel name sign inside entrance, and floor label signs on each floor.
     /// </summary>
     private async Task GenerateSignsAsync(int bx, int bz, string channelName, CancellationToken ct)
     {
         var truncatedName = channelName.Length > 15 ? channelName[..15] : channelName;
-        var nameText = $"{{\"text\":\"#{truncatedName}\"}}";
-        var castleText = "{\"text\":\"Castle Keep\"}";
+        
+        // Minecraft 1.20+ signs need plain text in double quotes, not JSON objects
+        // Format: '\"text here\"' produces a simple text display
+        var nameText = $"\"#{truncatedName}\"";
+        var castleText = "\"Castle Keep\"";
+        var emptyText = "\"\"";
 
         int maxZ = bz + HalfFootprint;
 
-        // Exterior entrance sign — on the solid wall block above the arch
-        // The arch leaves blocks at bx-1 and bx+1 at BaseY+4, and the wall above at BaseY+5 is solid
-        await rcon.SendSetBlockAsync(bx, BaseY + 5, maxZ,
-            $"minecraft:oak_wall_sign[facing=south]{{front_text:{{messages:['{castleText}','{nameText}','\"\"','\"\"']}}}}", ct);
+        // Exterior entrance sign — OUTSIDE the building, above the doorway, facing SOUTH
+        // Place at maxZ + 1 (one block outside the wall) so it faces outward toward approaching players
+        await rcon.SendSetBlockAsync(bx, BaseY + 5, maxZ + 1,
+            $"minecraft:oak_wall_sign[facing=south]{{front_text:{{messages:['{castleText}','{nameText}',{emptyText},{emptyText}]}}}}", ct);
 
         // Interior entrance sign — on south interior wall, attached to solid wall
         int interiorSignZ = bz + HalfFootprint - 1;
         await rcon.SendSetBlockAsync(bx, BaseY + 2, interiorSignZ,
-            $"minecraft:oak_wall_sign[facing=north]{{front_text:{{messages:['\"\"','{nameText}','\"\"','\"\"']}}}}", ct);
+            $"minecraft:oak_wall_sign[facing=north]{{front_text:{{messages:[{emptyText},'{nameText}',{emptyText},{emptyText}]}}}}", ct);
 
         // Floor signs on each level — on south interior wall
         for (int floor = 0; floor < Floors; floor++)
@@ -357,11 +378,11 @@ public sealed class BuildingGenerator(RconService rcon, ILogger<BuildingGenerato
             // Place sign offset from entrance sign to avoid overlap on ground floor
             int signX = bx + 3;
 
-            var floorLabel = $"{{\"text\":\"Floor {floor + 1}\"}}";
-            var channelLabel = $"{{\"text\":\"#{truncatedName}\"}}";
+            var floorLabel = $"\"Floor {floor + 1}\"";
+            var channelLabel = $"\"#{truncatedName}\"";
 
             await rcon.SendSetBlockAsync(signX, signY, interiorSignZ,
-                $"minecraft:oak_wall_sign[facing=north]{{front_text:{{messages:['\"\"','{floorLabel}','{channelLabel}','\"\"']}}}}", ct);
+                $"minecraft:oak_wall_sign[facing=north]{{front_text:{{messages:[{emptyText},'{floorLabel}','{channelLabel}',{emptyText}]}}}}", ct);
         }
     }
 }

@@ -98,10 +98,17 @@ try {
 
 ### Sign NBT Format (1.20+)
 
+**CORRECT format** — plain quoted strings, NOT JSON objects:
+```
+{front_text:{messages:['"Line 1"','"Line 2"','""','""']}}
+```
+
+**INCORRECT format** — displays raw JSON on sign face:
 ```
 {front_text:{messages:['{"text":"Line 1"}','{"text":"Line 2"}','""','""']}}
 ```
 
+- Use plain double-quoted strings: `'"Hello"'` not `'{"text":"Hello"}'`
 - Standing signs use `rotation=N` (0=north, 4=east, 8=south, 12=west)
 - Wall signs use `facing=direction` (north, south, east, west)
 - Wall signs MUST be placed on or adjacent to a solid block

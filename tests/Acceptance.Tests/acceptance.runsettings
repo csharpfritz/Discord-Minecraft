@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Acceptance test runsettings:
+  - Longer timeout for full-stack tests (10 min vs. default 5 min)
+  - Parallel execution disabled (single Minecraft container)
+  - Category filter to run only acceptance tests
+-->
+<RunSettings>
+  <RunConfiguration>
+    <TestSessionTimeout>600000</TestSessionTimeout>
+    <MaxCpuCount>1</MaxCpuCount>
+    <ResultsDirectory>.\TestResults</ResultsDirectory>
+  </RunConfiguration>
+  <xUnit>
+    <MaxParallelThreads>1</MaxParallelThreads>
+    <ParallelizeTestCollections>false</ParallelizeTestCollections>
+  </xUnit>
+</RunSettings>

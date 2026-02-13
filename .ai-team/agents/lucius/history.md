@@ -135,7 +135,10 @@
 - `BuildingArchiveRequest` model in `WorldGen.Worker/Models/`
 - `DiscordEventConsumer.HandleChannelDeletedAsync` now includes `ChannelGroup` via `.Include()` for village center coords
 - `DiscordEventConsumer.HandleChannelGroupDeletedAsync` builds `ArchiveVillageJobPayload` with all building payloads
-📌 Team update (2026-02-12): Minecart track layout — L-shaped paths at y=65, stations 30 blocks south of village center, angle-based platform slots — decided by Batgirl
+- **Completed S3-05:** Wired `ArchiveBuilding` and `ArchiveVillage` job types in `WorldGenJobProcessor.DispatchJobAsync` — injected `IBuildingArchiver` and added switch cases to deserialize payloads and invoke the archiver
+- `ArchiveVillage` iterates `villageArchivePayload.Buildings` and calls `buildingArchiver.ArchiveAsync` for each building — no separate village-level RCON logic needed
+- Full flow verified: Discord channel/category delete → `DiscordEventConsumer` sets `IsArchived=true` + enqueues job → `WorldGenJobProcessor` dequeues and dispatches → `BuildingArchiver` updates signs + blocks entrance via RCON
+📌 Team update (2026-02-12): Minecart track layout— L-shaped paths at y=65, stations 30 blocks south of village center, angle-based platform slots — decided by Batgirl
 📌 Team update (2026-02-12): BlueMap integration added as S3-08 — drop-in Paper plugin, port 8100 via Aspire, Java API markers — decided by Gordon
 📌 Team update (2026-02-12): Sprint 3 test specs written — 14 channel deletion + 8 E2E smoke tests, reusing BridgeApiFactory — decided by Nightwing
 📌 Team update (2026-02-12): Paper Bridge Plugin uses JDK HttpServer + Jedis + Bukkit scheduler, player events on events:minecraft:player — decided by Oracle

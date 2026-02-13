@@ -14,6 +14,7 @@ public sealed class WorldGenJobProcessor(
     IServiceScopeFactory scopeFactory,
     IVillageGenerator villageGenerator,
     IBuildingGenerator buildingGenerator,
+    IBuildingArchiver buildingArchiver,
     ITrackGenerator trackGenerator,
     ILogger<WorldGenJobProcessor> logger) : BackgroundService
 {
@@ -170,6 +171,39 @@ public sealed class WorldGenJobProcessor(
                     DestCenterX: trackPayload.DestCenterX,
                     DestCenterZ: trackPayload.DestCenterZ);
                 await trackGenerator.GenerateAsync(trackRequest, ct);
+                break;
+
+            case WorldGenJobType.ArchiveBuilding:
+                var archivePayload = JsonSerializer.Deserialize<ArchiveBuildingJobPayload>(job.Payload, PayloadOptions)
+                    ?? throw new InvalidOperationException("Failed to deserialize ArchiveBuildingJobPayload");
+                var archiveRequest = new BuildingArchiveRequest(
+                    JobId: job.JobId,
+                    ChannelGroupId: archivePayload.ChannelGroupId,
+                    ChannelId: archivePayload.ChannelId,
+                    BuildingIndex: archivePayload.BuildingIndex,
+                    VillageCenterX: archivePayload.CenterX,
+                    VillageCenterZ: archivePayload.CenterZ,
+                    ChannelName: archivePayload.ChannelName);
+                await buildingArchiver.ArchiveAsync(archiveRequest, ct);
+                break;
+
+            case WorldGenJobType.ArchiveVillage:
+                var villageArchivePayload = JsonSerializer.Deserialize<ArchiveVillageJobPayload>(job.Payload, PayloadOptions)
+                    ?? throw new InvalidOperationException("Failed to deserialize ArchiveVillageJobPayload");
+                logger.LogInformation("Archiving village '{Name}' with {Count} buildings",
+                    villageArchivePayload.VillageName, villageArchivePayload.Buildings.Count);
+                foreach (var bldg in villageArchivePayload.Buildings)
+                {
+                    var bldgRequest = new BuildingArchiveRequest(
+                        JobId: job.JobId,
+                        ChannelGroupId: bldg.ChannelGroupId,
+                        ChannelId: bldg.ChannelId,
+                        BuildingIndex: bldg.BuildingIndex,
+                        VillageCenterX: bldg.CenterX,
+                        VillageCenterZ: bldg.CenterZ,
+                        ChannelName: bldg.ChannelName);
+                    await buildingArchiver.ArchiveAsync(bldgRequest, ct);
+                }
                 break;
 
             default:

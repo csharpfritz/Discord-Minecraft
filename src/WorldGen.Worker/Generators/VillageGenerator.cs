@@ -11,6 +11,12 @@ public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator>
     private const int WallHeight = 3;
     private const int LightSpacing = 4;
 
+    // Village fence: encompasses all buildings with 3-block buffer
+    // Buildings placed in 4x4 grid at 50 + (0-3)*27 = max 131 blocks from center
+    // Building footprint is 21, so max edge is 131 + 10.5 ~ 142 blocks
+    // Fence at 150 blocks gives 3+ block buffer from outermost building edge
+    private const int FenceRadius = 150;
+
     public async Task GenerateAsync(VillageGenerationRequest request, CancellationToken ct)
     {
         var cx = request.CenterX;
@@ -19,8 +25,8 @@ public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator>
         logger.LogInformation("Generating village '{Name}' at ({CenterX}, {CenterZ}), index {Index}",
             request.Name, cx, cz, request.VillageIndex);
 
-        // Forceload chunks covering the village plaza and paths before placing blocks
-        int radius = PlazaRadius + 10; // include welcome paths
+        // Forceload chunks covering the village fence perimeter before placing blocks
+        int radius = FenceRadius + 5; // include fence and gates
         int minChunkX = (cx - radius) >> 4;
         int maxChunkX = (cx + radius) >> 4;
         int minChunkZ = (cz - radius) >> 4;
@@ -33,6 +39,7 @@ public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator>
         await GenerateLightingAsync(cx, cz, ct);
         await GenerateSignsAsync(cx, cz, request.Name, ct);
         await GenerateWelcomePathsAsync(cx, cz, ct);
+        await GenerateVillageFenceAsync(cx, cz, ct);
 
         // Release forceloaded chunks
         await rcon.SendCommandAsync($"forceload remove {minChunkX << 4} {minChunkZ << 4} {maxChunkX << 4} {maxChunkZ << 4}", ct);
@@ -184,5 +191,59 @@ public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator>
 
         // East path
         await rcon.SendFillAsync(maxX, BaseY, cz - 1, maxX + 10, BaseY, cz + 1, "minecraft:stone_bricks", ct);
+    }
+
+    /// <summary>
+    /// Village perimeter fence: oak fence around the entire village (outside all buildings)
+    /// with fence gates at the 4 cardinal entrances.
+    /// </summary>
+    private async Task GenerateVillageFenceAsync(int cx, int cz, CancellationToken ct)
+    {
+        logger.LogInformation("Generating village perimeter fence at radius {FenceRadius}", FenceRadius);
+
+        int minX = cx - FenceRadius;
+        int maxX = cx + FenceRadius;
+        int minZ = cz - FenceRadius;
+        int maxZ = cz + FenceRadius;
+
+        // North fence — oak fence with gap for gate at center
+        await rcon.SendFillAsync(minX, BaseY + 1, minZ, cx - 2, BaseY + 1, minZ, "minecraft:oak_fence", ct);
+        await rcon.SendFillAsync(cx + 2, BaseY + 1, minZ, maxX, BaseY + 1, minZ, "minecraft:oak_fence", ct);
+
+        // South fence — oak fence with gap for gate
+        await rcon.SendFillAsync(minX, BaseY + 1, maxZ, cx - 2, BaseY + 1, maxZ, "minecraft:oak_fence", ct);
+        await rcon.SendFillAsync(cx + 2, BaseY + 1, maxZ, maxX, BaseY + 1, maxZ, "minecraft:oak_fence", ct);
+
+        // West fence — oak fence with gap for gate
+        await rcon.SendFillAsync(minX, BaseY + 1, minZ, minX, BaseY + 1, cz - 2, "minecraft:oak_fence", ct);
+        await rcon.SendFillAsync(minX, BaseY + 1, cz + 2, minX, BaseY + 1, maxZ, "minecraft:oak_fence", ct);
+
+        // East fence — oak fence with gap for gate
+        await rcon.SendFillAsync(maxX, BaseY + 1, minZ, maxX, BaseY + 1, cz - 2, "minecraft:oak_fence", ct);
+        await rcon.SendFillAsync(maxX, BaseY + 1, cz + 2, maxX, BaseY + 1, maxZ, "minecraft:oak_fence", ct);
+
+        // Fence gates at cardinal entrances (3-wide gates)
+        // North gate
+        await rcon.SendFillAsync(cx - 1, BaseY + 1, minZ, cx + 1, BaseY + 1, minZ, "minecraft:oak_fence_gate[facing=north]", ct);
+
+        // South gate
+        await rcon.SendFillAsync(cx - 1, BaseY + 1, maxZ, cx + 1, BaseY + 1, maxZ, "minecraft:oak_fence_gate[facing=south]", ct);
+
+        // West gate
+        await rcon.SendFillAsync(minX, BaseY + 1, cz - 1, minX, BaseY + 1, cz + 1, "minecraft:oak_fence_gate[facing=west]", ct);
+
+        // East gate
+        await rcon.SendFillAsync(maxX, BaseY + 1, cz - 1, maxX, BaseY + 1, cz + 1, "minecraft:oak_fence_gate[facing=east]", ct);
+
+        // Corner fence posts with lanterns for visibility
+        await rcon.SendSetBlockAsync(minX, BaseY + 1, minZ, "minecraft:oak_fence", ct);
+        await rcon.SendSetBlockAsync(maxX, BaseY + 1, minZ, "minecraft:oak_fence", ct);
+        await rcon.SendSetBlockAsync(minX, BaseY + 1, maxZ, "minecraft:oak_fence", ct);
+        await rcon.SendSetBlockAsync(maxX, BaseY + 1, maxZ, "minecraft:oak_fence", ct);
+
+        await rcon.SendSetBlockAsync(minX, BaseY + 2, minZ, "minecraft:lantern[hanging=false]", ct);
+        await rcon.SendSetBlockAsync(maxX, BaseY + 2, minZ, "minecraft:lantern[hanging=false]", ct);
+        await rcon.SendSetBlockAsync(minX, BaseY + 2, maxZ, "minecraft:lantern[hanging=false]", ct);
+        await rcon.SendSetBlockAsync(maxX, BaseY + 2, maxZ, "minecraft:lantern[hanging=false]", ct);
     }
 }

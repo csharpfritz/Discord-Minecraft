@@ -57,3 +57,17 @@
 📌 Team update (2026-02-12): MinecraftHealthCheck added — Aspire dashboard shows MC as unhealthy until RCON responds — decided by Lucius
 📌 Team update (2026-02-12): Startup guild sync added to DiscordBotWorker — populates DB on bot ready — decided by Oracle
 📌 Team update (2026-02-12): Sync endpoint now creates GenerationJob records and pushes to Redis queue — decided by Oracle
+- Acceptance test project at `tests/Acceptance.Tests/` uses Aspire.Hosting.Testing to launch full stack
+- `FullStackFixture` manages Aspire app lifecycle — initializes PostgreSQL, Redis, Bridge.Api, WorldGen.Worker, Minecraft container with BlueMap
+- `BlueMapClient` queries static JSON files (`/maps/{mapId}/markers.json`) — BlueMap has no REST API
+- `DiscordEventPublisher` simulates Discord events by publishing to `events:discord:channel` Redis channel
+- Acceptance tests wait for jobs via polling `queue:worldgen` length + delay for in-progress completion
+- BlueMap serves markers in marker sets: `discord-villages` for villages, `discord-buildings` for buildings
+- Parallel test execution disabled for acceptance tests — single Minecraft container shared across all tests
+- Test timeouts: 5min stack startup, 3min BlueMap ready, 5min per job completion, 10min session overall
+- Acceptance test suite expanded: 6 test classes covering village creation, track routing, archival, edge cases, negative tests, and concurrency
+- Test categories use xUnit traits: `[Trait("Category", "Acceptance")]` with subcategories like `Smoke`, `Tracks`, `Archival`, `EdgeCases`, `Negative`, `Concurrency`
+- Edge case tests verify: out-of-order events, simultaneous channel creation, duplicate events (idempotency), long/unicode names, BlueMap marker timeout polling
+- Negative tests verify: malformed JSON resilience, missing EventType, null fields, empty payloads, unknown event types, API 404 for non-existent resources
+- Concurrency tests verify: simultaneous village creation, parallel channel creation in same village, mixed create operations, high-volume event bursts (10+ channels)
+- Track routing tests verify: first village creates no tracks, second village triggers track to first, archived villages excluded from track network
