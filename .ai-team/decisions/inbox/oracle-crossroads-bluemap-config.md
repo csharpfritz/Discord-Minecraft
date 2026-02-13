@@ -1,4 +1,0 @@
-### Crossroads API and BlueMap URL configuration (S4-08)
-**By:** Oracle
-**What:** Added `BlueMap:WebUrl` config key to Bridge.Api for constructing BlueMap deep-link URLs in API responses (default `http://localhost:8200`). This is separate from the Discord bot's existing `BlueMap:BaseUrl` which reads from the Aspire-wired `BlueMap__BaseUrl` env var. The `/api/crossroads` endpoint returns a `blueMapUrl` field with a deep-link to the map centered on Crossroads origin. The `/crossroads` slash command in the Discord bot calls this endpoint and displays the link in an embed.
-**Why:** API responses need a publicly-accessible BlueMap URL for embedding in Discord messages and other consumers. The BlueMap web UI runs on port 8200 (configured in AppHost.cs). The Crossroads hub is always at world origin (0, 0) so the URL is deterministic. Keeping the config key in Bridge.Api allows future flexibility if the BlueMap URL differs between environments.

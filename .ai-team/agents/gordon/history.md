@@ -65,3 +65,6 @@
 📌 Team update (2026-02-13): Sprint 4 plan — 8 work items: Crossroads hub, hub-and-spoke tracks, player teleport, building variety, station relocation, BlueMap markers, E2E tests, Crossroads integration. Account linking deferred again — decided by Gordon
 📌 Team update (2026-02-13): Plugin HTTP port 8180 exposed via Aspire for marker wiring — Plugin HTTP API now reachable from WorldGen.Worker — decided by Oracle
 📌 Team update (2026-02-13): /goto command uses Bridge API (/api/buildings/search + /api/buildings/{id}/spawn) for building lookup and teleport — decided by Oracle
+📌 Team update (2026-02-13): Hub-and-Spoke track topology — each village gets one track to Crossroads, O(n) instead of O(n²), radial slot positioning at Crossroads — decided by Batgirl
+📌 Team update (2026-02-13): Village station relocation to plaza edge — VillageStationOffset=17, shared constant in WorldConstants — decided by Batgirl
+📌 Team update (2026-02-13): Crossroads API and BlueMap URL configuration — Bridge.Api has BlueMap:WebUrl config key, /api/crossroads endpoint, /crossroads slash command — decided by Oracle

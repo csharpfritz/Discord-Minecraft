@@ -280,3 +280,18 @@ Changes applied across branches: `main`, `squad/10-bluemap`, `squad/1-paper-brid
 **By:** Oracle
 **What:** The `/goto <channel-name>` in-game command queries the Bridge API (`/api/buildings/search` + `/api/buildings/{id}/spawn`) to find and teleport players to Discord channel buildings. No account linking required. Bridge API URL is configurable in the plugin's `config.yml` (`bridge-api-url`, default `http://localhost:5169`). Uses `java.net.http.HttpClient` (no external deps). 5-second cooldown prevents API spam.
 **Why:** Keeps coordinate calculation logic server-side in the .NET API (single source of truth matching BuildingGenerator layout). The plugin stays thin — just HTTP calls + teleport.
+
+### 2026-02-13: Hub-and-Spoke Track Topology (S4-02)
+**By:** Batgirl
+**What:** Track routing changed from point-to-point (N×(N-1)/2 tracks) to hub-and-spoke (1 track per village to Crossroads at origin). WorldGenJobProcessor creates exactly one CreateTrack job per village with destination Crossroads. TrackGenerator detects Crossroads destination and uses radial slot positioning via Atan2-based angle mapping to 16 slots at radius 35 (`WorldConstants.CrossroadsStationRadius`). No schema changes to TrackJobPayload/TrackGenerationRequest.
+**Why:** Point-to-point created O(n²) tracks, causing overlapping rails, excessive forceloaded chunks, and confusing station sprawl. Hub-and-spoke gives O(n) tracks with clean radial arrivals at the central hub.
+
+### 2026-02-13: Village station relocation to plaza edge (S4-04)
+**By:** Batgirl
+**What:** Village stations relocated from 20 blocks south of center to 17 blocks south (PlazaRadius + 2). VillageGenerator builds a 9×5 stone brick station area at the south plaza edge with a cobblestone walkway and directional sign. TrackGenerator's StationOffset now references `WorldConstants.VillageStationOffset` instead of a hardcoded value. New constants: `VillageStationOffset = 17`, `VillagePlazaInnerRadius = 15`.
+**Why:** Jeff's directive — stations should be visible from the village plaza, not hidden behind buildings.
+
+### 2026-02-13: Crossroads API and BlueMap URL configuration (S4-08)
+**By:** Oracle
+**What:** Added `BlueMap:WebUrl` config key to Bridge.Api for constructing BlueMap deep-link URLs in API responses (default `http://localhost:8200`). Separate from the Discord bot's `BlueMap:BaseUrl`. The `/api/crossroads` endpoint returns a `blueMapUrl` field with a deep-link centered on Crossroads origin. The `/crossroads` slash command calls this endpoint and displays the link in an embed.
+**Why:** API responses need a publicly-accessible BlueMap URL for embedding in Discord messages. The Crossroads hub is always at world origin (0, 0) so the URL is deterministic.

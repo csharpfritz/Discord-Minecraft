@@ -1,4 +1,0 @@
-### 2026-02-13: Village station relocation to plaza edge (S4-04)
-**By:** Batgirl
-**What:** Village stations relocated from 20 blocks south of center to 17 blocks south (PlazaRadius + 2). VillageGenerator builds a 9×5 stone brick station area at the south plaza edge with a cobblestone walkway and directional sign. TrackGenerator's StationOffset now references `WorldConstants.VillageStationOffset` instead of a hardcoded value. New constants in WorldConstants.cs: `VillageStationOffset = 17`, `VillagePlazaInnerRadius = 15`.
-**Why:** Jeff's directive — stations should be visible from the village plaza, not hidden behind buildings. Moving the station 3 blocks closer and adding a dedicated walkway makes the station feel like part of the village. Shared constant ensures VillageGenerator and TrackGenerator stay aligned on station position.
