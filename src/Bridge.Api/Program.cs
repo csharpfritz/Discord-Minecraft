@@ -337,6 +337,51 @@ app.MapPost("/api/players/link", async (LinkRequest request, IConnectionMultiple
     return Results.Ok(new { code });
 });
 
+// POST /api/buildings/{id}/pin — Pin a Discord message to a building's interior
+app.MapPost("/api/buildings/{id}/pin", async (int id, PinRequest request, BridgeDbContext db, IConnectionMultiplexer redis) =>
+{
+    var channel = await db.Channels
+        .Include(c => c.ChannelGroup)
+        .FirstOrDefaultAsync(c => c.Id == id);
+
+    if (channel is null)
+        return Results.NotFound(new { message = "Building not found." });
+
+    if (channel.IsArchived)
+        return Results.BadRequest(new { message = "Cannot pin to an archived building." });
+
+    var redisDb = redis.GetDatabase();
+
+    var pinData = new PinData(request.Author, request.Content, request.Timestamp);
+    var updatePayload = new UpdateBuildingJobPayload(
+        channel.ChannelGroupId,
+        channel.Id,
+        channel.BuildingIndex,
+        channel.ChannelGroup.CenterX,
+        channel.ChannelGroup.CenterZ,
+        channel.Name,
+        pinData);
+
+    var genJob = new GenerationJob
+    {
+        Type = WorldGenJobType.UpdateBuilding.ToString(),
+        Payload = JsonSerializer.Serialize(updatePayload, jsonOptions),
+        Status = GenerationJobStatus.Pending
+    };
+    db.GenerationJobs.Add(genJob);
+    await db.SaveChangesAsync();
+
+    var worldGenJob = new WorldGenJob
+    {
+        JobType = WorldGenJobType.UpdateBuilding,
+        JobId = genJob.Id,
+        Payload = JsonSerializer.Serialize(updatePayload, jsonOptions)
+    };
+    await redisDb.ListLeftPushAsync(RedisQueues.WorldGen, worldGenJob.ToJson());
+
+    return Results.Accepted(value: new { jobId = genJob.Id, buildingId = id });
+});
+
 app.Run();
 
 // Request DTOs
@@ -344,3 +389,4 @@ public record SyncRequest(string GuildId, List<SyncChannelGroup> ChannelGroups);
 public record SyncChannelGroup(string DiscordId, string Name, int Position, List<SyncChannel> Channels);
 public record SyncChannel(string DiscordId, string Name, int Position = 0);
 public record LinkRequest(string DiscordId);
+public record PinRequest(string Author, string Content, DateTimeOffset Timestamp);

@@ -19,6 +19,10 @@ builder.Services.AddHttpClient<MarkerService>(client =>
 {
     client.BaseAddress = new Uri(builder.Configuration["Plugin:BaseUrl"] ?? "http://localhost:8180");
 });
+builder.Services.AddHttpClient<PinDisplayService>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["Plugin:BaseUrl"] ?? "http://localhost:8180");
+});
 builder.Services.AddHostedService<CrossroadsInitializationService>();
 builder.Services.AddHostedService<WorldGenJobProcessor>();
 

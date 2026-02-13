@@ -18,6 +18,7 @@ public sealed class WorldGenJobProcessor(
     IBuildingGenerator buildingGenerator,
     IBuildingArchiver buildingArchiver,
     ITrackGenerator trackGenerator,
+    PinDisplayService pinDisplayService,
     MarkerService markerService,
     RconService rconService,
     ILogger<WorldGenJobProcessor> logger) : BackgroundService
@@ -167,7 +168,9 @@ public sealed class WorldGenJobProcessor(
                 break;
 
             case WorldGenJobType.UpdateBuilding:
-                logger.LogWarning("UpdateBuilding not yet implemented (Sprint 3 scope), JobId={JobId}", job.JobId);
+                var updatePayload = JsonSerializer.Deserialize<UpdateBuildingJobPayload>(job.Payload, PayloadOptions)
+                    ?? throw new InvalidOperationException("Failed to deserialize UpdateBuildingJobPayload");
+                await pinDisplayService.DisplayPinAsync(updatePayload, ct);
                 break;
 
             case WorldGenJobType.CreateTrack:

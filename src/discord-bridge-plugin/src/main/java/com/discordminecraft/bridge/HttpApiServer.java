@@ -2,20 +2,31 @@ package com.discordminecraft.bridge;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import org.bukkit.Bukkit;
+import org.bukkit.Location;
+import org.bukkit.Material;
+import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
+import org.bukkit.block.Lectern;
+import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.BookMeta;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -48,6 +59,7 @@ public final class HttpApiServer {
         server.createContext("/api/markers/building", this::handleBuildingMarker);
         server.createContext("/api/markers/building/archive", this::handleArchiveBuildingMarker);
         server.createContext("/api/markers/village/archive", this::handleArchiveVillageMarker);
+        server.createContext("/plugin/lectern", this::handleLectern);
     }
 
     public void start() {
@@ -254,6 +266,81 @@ public final class HttpApiServer {
             sendResponse(exchange, 200, gson.toJson(result));
         } catch (Exception e) {
             logger.log(Level.WARNING, "Failed to archive village marker", e);
+            sendResponse(exchange, 400, errorJson("Invalid request: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * POST /plugin/lectern -- Places a lectern with a written book at the specified coordinates.
+     * Body: { "x": int, "y": int, "z": int, "title": "...", "author": "...", "pages": ["..."] }
+     * Must run on the main server thread for Bukkit API thread safety.
+     */
+    private void handleLectern(HttpExchange exchange) throws IOException {
+        if (!"POST".equalsIgnoreCase(exchange.getRequestMethod())) {
+            sendResponse(exchange, 405, errorJson("Method not allowed"));
+            return;
+        }
+
+        String body = readBody(exchange);
+        if (body.isEmpty()) {
+            sendResponse(exchange, 400, errorJson("Request body is required"));
+            return;
+        }
+
+        try {
+            JsonObject json = JsonParser.parseString(body).getAsJsonObject();
+            int x = json.get("x").getAsInt();
+            int y = json.get("y").getAsInt();
+            int z = json.get("z").getAsInt();
+            String title = json.get("title").getAsString();
+            String author = json.get("author").getAsString();
+            JsonArray pagesArray = json.getAsJsonArray("pages");
+
+            List<String> pages = new ArrayList<>();
+            for (int i = 0; i < pagesArray.size(); i++) {
+                pages.add(pagesArray.get(i).getAsString());
+            }
+
+            // Execute on main thread for Bukkit API safety
+            CompletableFuture<Boolean> future = new CompletableFuture<>();
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                try {
+                    var world = Bukkit.getWorlds().get(0);
+                    Location loc = new Location(world, x, y, z);
+                    Block block = loc.getBlock();
+
+                    block.setType(Material.LECTERN);
+
+                    Lectern lectern = (Lectern) block.getState();
+                    ItemStack book = new ItemStack(Material.WRITTEN_BOOK);
+                    BookMeta meta = (BookMeta) book.getItemMeta();
+                    meta.setTitle(title.length() > 32 ? title.substring(0, 32) : title);
+                    meta.setAuthor(author.length() > 16 ? author.substring(0, 16) : author);
+                    for (String page : pages) {
+                        meta.addPage(page);
+                    }
+                    book.setItemMeta(meta);
+                    lectern.getInventory().setItem(0, book);
+                    lectern.update();
+
+                    future.complete(true);
+                } catch (Exception e) {
+                    logger.log(Level.WARNING, "Failed to place lectern", e);
+                    future.complete(false);
+                }
+            });
+
+            boolean success = future.get(5, java.util.concurrent.TimeUnit.SECONDS);
+
+            Map<String, Object> result = new HashMap<>();
+            result.put("success", success);
+            result.put("x", x);
+            result.put("y", y);
+            result.put("z", z);
+            sendResponse(exchange, success ? 200 : 500, gson.toJson(result));
+
+        } catch (Exception e) {
+            logger.log(Level.WARNING, "Failed to handle lectern request", e);
             sendResponse(exchange, 400, errorJson("Invalid request: " + e.getMessage()));
         }
     }
