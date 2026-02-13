@@ -47,6 +47,11 @@ public final class BridgePlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
                 new PlayerEventListener(this, redisPublisher), this);
 
+        // Register welcome/orientation listener
+        getServer().getPluginManager().registerEvents(
+                new WelcomeListener(this), this);
+        getLogger().info("Welcome listener registered");
+
         // Start HTTP API server
         try {
             httpServer = new HttpApiServer(httpPort, this, blueMapIntegration, getLogger());

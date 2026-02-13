@@ -6,6 +6,9 @@ http-port: 8180
 # Bridge API URL for /goto command
 bridge-api-url: "http://localhost:5169"
 
+# Guild/server name shown in welcome title
+guild-name: "Discord World"
+
 # Redis connection settings
 redis:
   host: "localhost"

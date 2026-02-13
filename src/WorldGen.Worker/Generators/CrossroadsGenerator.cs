@@ -43,13 +43,15 @@ public sealed class CrossroadsGenerator(RconService rcon, ILogger<CrossroadsGene
         await rcon.SendCommandAsync(
             $"forceload add {minChunkX << 4} {minChunkZ << 4} {maxChunkX << 4} {maxChunkZ << 4}", ct);
 
-        // Build order: Foundation → Structures → Details → Lighting → Signs
+        // Build order: Foundation → Structures → Details → Lighting → Signs → Amenities
         await GeneratePlazaAsync(cx, cz, ct);
         await GenerateFountainAsync(cx, cz, ct);
         await GenerateAvenuesAsync(cx, cz, ct);
         await GenerateStationSlotsAsync(cx, cz, ct);
         await GenerateWelcomeSignsAsync(cx, cz, ct);
         await GenerateDecorativeBannersAsync(cx, cz, ct);
+        await GenerateSpawnPressurePlateAsync(cx, cz, ct);
+        await GenerateInfoKioskAsync(cx, cz, ct);
 
         // Set world spawn at the fountain top
         await rcon.SendCommandAsync("setworldspawn 0 -59 0", ct);
@@ -428,5 +430,57 @@ public sealed class CrossroadsGenerator(RconService rcon, ILogger<CrossroadsGene
         }
 
         await rcon.SendSetBlockBatchAsync(blocks, ct);
+    }
+
+    /// <summary>
+    /// Places a golden pressure plate at the world spawn point.
+    /// Stepping on it triggers the welcome walkthrough via the Paper plugin.
+    /// </summary>
+    private async Task GenerateSpawnPressurePlateAsync(int cx, int cz, CancellationToken ct)
+    {
+        logger.LogInformation("Placing golden pressure plate at spawn");
+        // Place on top of the fountain base tier, right at the spawn point offset
+        // Spawn is at (0, -59, 0), pressure plate goes next to the fountain at an accessible spot
+        // Place it 8 blocks south of center — on the plaza, easily reachable from spawn
+        await rcon.SendSetBlockAsync(cx, BaseY + 1, cz + 8, "minecraft:light_weighted_pressure_plate", ct);
+        // Gold blocks underneath to make it visually distinct
+        await rcon.SendSetBlockAsync(cx, BaseY, cz + 8, "minecraft:gold_block", ct);
+        // Small gold accent ring
+        var accents = new List<(int x, int y, int z, string block)>
+        {
+            (cx - 1, BaseY, cz + 8, "minecraft:gold_block"),
+            (cx + 1, BaseY, cz + 8, "minecraft:gold_block"),
+            (cx, BaseY, cz + 7, "minecraft:gold_block"),
+            (cx, BaseY, cz + 9, "minecraft:gold_block"),
+        };
+        await rcon.SendSetBlockBatchAsync(accents, ct);
+    }
+
+    /// <summary>
+    /// Places a lectern with a written book at the Crossroads plaza — the info kiosk.
+    /// The book contains a world guide explaining villages, buildings, navigation, and commands.
+    /// </summary>
+    private async Task GenerateInfoKioskAsync(int cx, int cz, CancellationToken ct)
+    {
+        logger.LogInformation("Placing info kiosk lectern at Crossroads plaza");
+        // Place lectern 8 blocks east of center, at ground+1
+        int kioskX = cx + 8;
+        int kioskZ = cz;
+
+        // Lectern on a small quartz platform
+        await rcon.SendSetBlockAsync(kioskX, BaseY, kioskZ, "minecraft:quartz_block", ct);
+        await rcon.SendSetBlockAsync(kioskX, BaseY + 1, kioskZ, "minecraft:lectern[facing=west,has_book=true]", ct);
+
+        // Give the lectern a written book using the data command
+        string bookNbt = "{Book:{id:\"minecraft:written_book\",count:1,components:{\"minecraft:written_book_content\":" +
+            "{title:\"World Guide\",author:\"Crossroads\",pages:[" +
+            "'[{\"text\":\"Welcome to the\\nCrossroads of\\nthe World!\\n\\n\",\"bold\":true,\"color\":\"gold\"},{\"text\":\"This guide will\\nhelp you navigate\\nour Discord world.\"}]'," +
+            "'[{\"text\":\"Villages\\n\\n\",\"bold\":true,\"color\":\"green\"},{\"text\":\"Each Discord channel\\ncategory becomes a\\nMinecraft village.\\n\\nVillages have plazas,\\nbuildings, and rail\\nstations.\"}]'," +
+            "'[{\"text\":\"Buildings\\n\\n\",\"bold\":true,\"color\":\"aqua\"},{\"text\":\"Each Discord channel\\nbecomes a building\\nin its village.\\n\\nSigns on buildings\\nshow the channel name.\"}]'," +
+            "'[{\"text\":\"Minecarts\\n\\n\",\"bold\":true,\"color\":\"yellow\"},{\"text\":\"Rail tracks connect\\nevery village to the\\nCrossroads hub.\\n\\nHop in a minecart at\\nany station to travel!\"}]'," +
+            "'[{\"text\":\"/goto Command\\n\\n\",\"bold\":true,\"color\":\"light_purple\"},{\"text\":\"Use /goto <name>\\nto teleport directly\\nto any channel\\nbuilding.\\n\\nExample:\\n/goto general\"}]'" +
+            "]}}}}";
+
+        await rcon.SendCommandAsync($"data merge block {kioskX} {BaseY + 1} {kioskZ} {bookNbt}", ct);
     }
 }
