@@ -126,7 +126,8 @@ app.MapPost("/api/mappings/sync", async (SyncRequest request, BridgeDbContext db
                 // Create GenerationJob and enqueue to Redis
                 var buildingPayload = new BuildingJobPayload(
                     group.Id, channel.Id, group.VillageIndex, channel.BuildingIndex,
-                    group.CenterX, group.CenterZ, channel.Name, group.Name);
+                    group.CenterX, group.CenterZ, channel.Name, group.Name,
+                    MemberCount: channelDto.MemberCount);
 
                 var buildingJob = new GenerationJob
                 {
@@ -387,6 +388,6 @@ app.Run();
 // Request DTOs
 public record SyncRequest(string GuildId, List<SyncChannelGroup> ChannelGroups);
 public record SyncChannelGroup(string DiscordId, string Name, int Position, List<SyncChannel> Channels);
-public record SyncChannel(string DiscordId, string Name, int Position = 0);
+public record SyncChannel(string DiscordId, string Name, int Position = 0, int MemberCount = 0);
 public record LinkRequest(string DiscordId);
 public record PinRequest(string Author, string Content, DateTimeOffset Timestamp);

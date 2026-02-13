@@ -4,8 +4,8 @@ public static class WorldConstants
 {
     public const int VillageSpacing = 175;
     public const int GridColumns = 10;
-    public const int BuildingFootprint = 21;
-    public const int BuildingFloors = 2;
+    public const int BuildingFootprint = 21; // Medium default; Small=15, Large=27
+    public const int BuildingFloors = 3; // Medium default; Small=2, Large=4
     public const int FloorHeight = 5;
     public const int VillagePlazaRadius = 60;
     public const int MaxBuildingsPerVillage = 16;

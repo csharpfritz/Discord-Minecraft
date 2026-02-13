@@ -9,5 +9,6 @@ public sealed record BuildingJobPayload(
     int CenterZ,
     string ChannelName,
     string VillageName,
-    string? ChannelTopic = null
+    string? ChannelTopic = null,
+    int MemberCount = 0
 );

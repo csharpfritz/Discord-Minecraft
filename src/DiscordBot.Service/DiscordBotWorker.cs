@@ -504,7 +504,7 @@ public class DiscordBotWorker(
                             channelOverwrite.Value.ViewChannel == PermValue.Deny)
                             continue;
 
-                        channels.Add(new SyncChannel(channel.Id.ToString(), channel.Name, channel.Position));
+                        channels.Add(new SyncChannel(channel.Id.ToString(), channel.Name, channel.Position, channel.Users.Count));
                     }
 
                     channelGroups.Add(new SyncChannelGroup(
@@ -544,7 +544,7 @@ public class DiscordBotWorker(
     // DTOs for /api/mappings/sync endpoint
     private record SyncRequest(string GuildId, List<SyncChannelGroup> ChannelGroups);
     private record SyncChannelGroup(string DiscordId, string Name, int Position, List<SyncChannel> Channels);
-    private record SyncChannel(string DiscordId, string Name, int Position = 0);
+    private record SyncChannel(string DiscordId, string Name, int Position = 0, int MemberCount = 0);
 
     private async Task PublishEventAsync(DiscordChannelEvent evt)
     {
