@@ -37,11 +37,13 @@ var bridgeApi = builder.AddProject<Projects.Bridge_Api>("bridge-api")
     .WaitFor(redis);
 
 var discordBotToken = builder.AddParameter("discord-bot-token", secret: true);
+var discordActivityChannelId = builder.AddParameter("discord-activity-channel-id");
 
 var discordBot = builder.AddProject<Projects.DiscordBot_Service>("discord-bot")
     .WithReference(redis)
     .WithReference(bridgeApi)
     .WithEnvironment("Discord__BotToken", discordBotToken)
+    .WithEnvironment("Discord__ActivityChannelId", discordActivityChannelId)
     .WithEnvironment("BlueMap__BaseUrl", minecraft.GetEndpoint("bluemap"))
     .WaitFor(redis)
     .WaitFor(bridgeApi);

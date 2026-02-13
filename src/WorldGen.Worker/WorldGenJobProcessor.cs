@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Bridge.Data;
 using Bridge.Data.Entities;
+using Bridge.Data.Events;
 using Bridge.Data.Jobs;
 using Microsoft.EntityFrameworkCore;
 using StackExchange.Redis;
@@ -95,6 +96,9 @@ public sealed class WorldGenJobProcessor(
             await dbContext.SaveChangesAsync(ct);
 
             logger.LogInformation("Job {JobId} completed successfully", job.JobId);
+
+            // Publish world activity event for Discord feed (best-effort)
+            await PublishActivityEventAsync(job);
 
             // After village creation completes, enqueue track job to Crossroads
             if (job.JobType == WorldGenJobType.CreateVillage)
@@ -216,6 +220,47 @@ public sealed class WorldGenJobProcessor(
 
             default:
                 throw new InvalidOperationException($"Unknown job type: {job.JobType}");
+        }
+    }
+
+    /// <summary>
+    /// Publishes a world activity event to Redis pub/sub for the Discord feed. Best-effort — never throws.
+    /// </summary>
+    private async Task PublishActivityEventAsync(WorldGenJob job)
+    {
+        try
+        {
+            var activityEvent = job.JobType switch
+            {
+                WorldGenJobType.CreateVillage =>
+                    JsonSerializer.Deserialize<VillageJobPayload>(job.Payload, PayloadOptions) is { } vp
+                        ? new WorldActivityEvent { Type = "village_built", Name = vp.VillageName, X = vp.CenterX, Z = vp.CenterZ }
+                        : null,
+                WorldGenJobType.CreateBuilding =>
+                    JsonSerializer.Deserialize<BuildingJobPayload>(job.Payload, PayloadOptions) is { } bp
+                        ? new WorldActivityEvent { Type = "building_built", Name = bp.ChannelName, X = bp.CenterX, Z = bp.CenterZ }
+                        : null,
+                WorldGenJobType.CreateTrack =>
+                    JsonSerializer.Deserialize<TrackJobPayload>(job.Payload, PayloadOptions) is { } tp
+                        ? new WorldActivityEvent { Type = "track_built", Name = $"{tp.SourceVillageName} ↔ {tp.DestinationVillageName}", X = tp.SourceCenterX, Z = tp.SourceCenterZ }
+                        : null,
+                WorldGenJobType.ArchiveBuilding =>
+                    JsonSerializer.Deserialize<ArchiveBuildingJobPayload>(job.Payload, PayloadOptions) is { } abp
+                        ? new WorldActivityEvent { Type = "building_archived", Name = abp.ChannelName, X = abp.CenterX, Z = abp.CenterZ }
+                        : null,
+                _ => null
+            };
+
+            if (activityEvent is not null)
+            {
+                var subscriber = redis.GetSubscriber();
+                await subscriber.PublishAsync(RedisChannel.Literal(RedisChannels.WorldActivity), activityEvent.ToJson());
+                logger.LogDebug("Published world activity event: {Type} — {Name}", activityEvent.Type, activityEvent.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to publish world activity event for job {JobId} — continuing", job.JobId);
         }
     }
 

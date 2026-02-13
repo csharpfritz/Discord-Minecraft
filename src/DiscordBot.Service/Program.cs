@@ -19,6 +19,7 @@ builder.Services.AddHttpClient("BridgeApi", client =>
     client.BaseAddress = new Uri("https+http://bridge-api");
 });
 builder.Services.AddHostedService<DiscordBotWorker>();
+builder.Services.AddHostedService<WorldActivityFeedService>();
 
 var host = builder.Build();
 host.Run();

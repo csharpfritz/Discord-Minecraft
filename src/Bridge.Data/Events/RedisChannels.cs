@@ -7,4 +7,5 @@ public static class RedisChannels
 {
     public const string DiscordChannel = "events:discord:channel";
     public const string MinecraftPlayer = "events:minecraft:player";
+    public const string WorldActivity = "events:world:activity";
 }
