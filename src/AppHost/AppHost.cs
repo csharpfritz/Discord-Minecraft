@@ -37,7 +37,7 @@ var bridgeApi = builder.AddProject<Projects.Bridge_Api>("bridge-api")
     .WaitFor(redis);
 
 var discordBotToken = builder.AddParameter("discord-bot-token", secret: true);
-var discordActivityChannelId = builder.AddParameter("discord-activity-channel-id");
+var discordActivityChannelId = builder.Configuration["Parameters:discord-activity-channel-id"] ?? "";
 
 var discordBot = builder.AddProject<Projects.DiscordBot_Service>("discord-bot")
     .WithReference(redis)
