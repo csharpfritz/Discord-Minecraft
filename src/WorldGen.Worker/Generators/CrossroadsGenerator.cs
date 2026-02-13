@@ -303,63 +303,42 @@ public sealed class CrossroadsGenerator(RconService rcon, ILogger<CrossroadsGene
     }
 
     /// <summary>
-    /// 16 radial platform slots evenly distributed around the plaza perimeter.
-    /// Each slot: 5×3 platform of stone bricks extending outward, with numbered sign.
+    /// 16 radial cobblestone walkways extending outward from the plaza edge toward
+    /// where TrackGenerator will place actual stations at CrossroadsStationRadius.
+    /// No placeholder signs — TrackGenerator builds the real station infrastructure.
     /// </summary>
     private async Task GenerateStationSlotsAsync(int cx, int cz, CancellationToken ct)
     {
-        logger.LogInformation("Generating {Count} radial station platform slots", StationSlots);
+        logger.LogInformation("Generating {Count} radial station walkways from plaza to station ring", StationSlots);
 
-        var slotFills = new List<(int x1, int y1, int z1, int x2, int y2, int z2, string block)>();
-        var slotSigns = new List<(int x, int y, int z, string block)>();
+        int stationRadius = WorldConstants.CrossroadsStationRadius;
+        var pathFills = new List<(int x1, int y1, int z1, int x2, int y2, int z2, string block)>();
 
         for (int slot = 0; slot < StationSlots; slot++)
         {
             double angle = 2.0 * Math.PI * slot / StationSlots;
 
-            int edgeX = cx + (int)Math.Round(PlazaRadius * Math.Cos(angle));
-            int edgeZ = cz + (int)Math.Round(PlazaRadius * Math.Sin(angle));
-
-            int dirX = Math.Sign(edgeX - cx);
-            int dirZ = Math.Sign(edgeZ - cz);
-
-            if (Math.Abs(Math.Cos(angle)) > Math.Abs(Math.Sin(angle)))
+            // Lay cobblestone path from plaza edge outward to station radius
+            for (int r = PlazaRadius + 1; r <= stationRadius; r++)
             {
-                for (int d = 0; d < 3; d++)
-                {
-                    slotFills.Add((edgeX + dirX * d, BaseY, edgeZ - 2,
-                        edgeX + dirX * d, BaseY, edgeZ + 2, "minecraft:stone_bricks"));
-                }
+                int px = cx + (int)Math.Round(r * Math.Cos(angle));
+                int pz = cz + (int)Math.Round(r * Math.Sin(angle));
 
-                string facing = dirX > 0 ? "rotation=4" : "rotation=12";
-                CollectSlotSign(edgeX + dirX * 2, edgeZ, facing, slot + 1, slotSigns);
-            }
-            else
-            {
-                for (int d = 0; d < 3; d++)
+                // 3-wide path perpendicular to the radial direction
+                if (Math.Abs(Math.Cos(angle)) > Math.Abs(Math.Sin(angle)))
                 {
-                    slotFills.Add((edgeX - 2, BaseY, edgeZ + dirZ * d,
-                        edgeX + 2, BaseY, edgeZ + dirZ * d, "minecraft:stone_bricks"));
+                    // Primarily E-W: widen along Z
+                    pathFills.Add((px, BaseY, pz - 1, px, BaseY, pz + 1, "minecraft:cobblestone"));
                 }
-
-                string facing = dirZ > 0 ? "rotation=0" : "rotation=8";
-                CollectSlotSign(edgeX, edgeZ + dirZ * 2, facing, slot + 1, slotSigns);
+                else
+                {
+                    // Primarily N-S: widen along X
+                    pathFills.Add((px - 1, BaseY, pz, px + 1, BaseY, pz, "minecraft:cobblestone"));
+                }
             }
         }
 
-        await rcon.SendFillBatchAsync(slotFills, ct);
-        await rcon.SendSetBlockBatchAsync(slotSigns, ct);
-    }
-
-    private static void CollectSlotSign(int x, int z, string facing, int slotNumber,
-        List<(int x, int y, int z, string block)> blocks)
-    {
-        var slotText = $"\"Slot {slotNumber}\"";
-        var stationText = "\"Station\"";
-        var emptyText = "\"\"";
-
-        blocks.Add((x, BaseY + 1, z,
-            $"minecraft:oak_sign[{facing}]{{front_text:{{messages:['{stationText}','{slotText}','{emptyText}','{emptyText}']}}}}"));
+        await rcon.SendFillBatchAsync(pathFills, ct);
     }
 
     /// <summary>

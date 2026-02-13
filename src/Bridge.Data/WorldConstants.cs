@@ -1,5 +1,14 @@
 namespace Bridge.Data;
 
+/// <summary>
+/// Orientation of a station platform: along the Z axis (north-south) or X axis (east-west).
+/// </summary>
+public enum StationOrientation
+{
+    NorthSouth,
+    EastWest
+}
+
 public static class WorldConstants
 {
     public const int VillageSpacing = 175;

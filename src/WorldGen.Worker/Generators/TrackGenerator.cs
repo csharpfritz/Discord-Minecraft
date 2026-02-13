@@ -36,18 +36,20 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
 
         bool destIsCrossroads = request.DestCenterX == 0 && request.DestCenterZ == 0;
 
-        // Source station: always south of village plaza
+        // Source station: always south of village plaza, always north-south
         int srcStationX = request.SourceCenterX;
         int srcStationZ = request.SourceCenterZ + StationOffset;
 
         int dstStationX, dstStationZ;
+        var dstOrientation = StationOrientation.NorthSouth;
 
         if (destIsCrossroads)
         {
             // Crossroads end: use radial slot based on angle from hub to village
-            var (slotX, slotZ) = GetCrossroadsSlotPosition(request.SourceCenterX, request.SourceCenterZ);
+            var (slotX, slotZ, orientation) = GetCrossroadsSlotPosition(request.SourceCenterX, request.SourceCenterZ);
             dstStationX = slotX;
             dstStationZ = slotZ;
+            dstOrientation = orientation;
         }
         else
         {
@@ -67,13 +69,22 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
         await ForceloadTrackRegionAsync(srcStationX, srcPlatformZ, dstPlatformX, dstPlatformZ, add: true, ct);
 
         await GenerateStationPlatformAsync(srcStationX, srcPlatformZ,
-            request.DestinationVillageName, request.SourceVillageName, ct);
+            request.DestinationVillageName, request.SourceVillageName,
+            StationOrientation.NorthSouth, ct);
         await GenerateStationPlatformAsync(dstPlatformX, dstPlatformZ,
-            request.SourceVillageName, request.DestinationVillageName, ct);
+            request.SourceVillageName, request.DestinationVillageName,
+            dstOrientation, ct);
+
+        // Build a cobblestone walkway from Crossroads station back toward plaza edge
+        if (destIsCrossroads)
+        {
+            await GenerateCrossroadsWalkwayAsync(dstPlatformX, dstPlatformZ, ct);
+        }
 
         await GenerateTrackPathAsync(
             srcStationX, srcPlatformZ,
             dstPlatformX, dstPlatformZ,
+            destIsCrossroads, dstOrientation,
             ct);
 
         // NOTE: We intentionally do NOT release forceloaded chunks along track paths.
@@ -115,8 +126,9 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
     /// Calculates the radial station slot position at Crossroads for a village.
     /// Uses the angle from Crossroads (0,0) to the village to pick one of 16 evenly
     /// spaced slots around the plaza perimeter at CrossroadsStationRadius.
+    /// Returns slot coordinates AND the radial orientation for the station platform.
     /// </summary>
-    private static (int X, int Z) GetCrossroadsSlotPosition(int villageCenterX, int villageCenterZ)
+    internal static (int X, int Z, StationOrientation Orientation) GetCrossroadsSlotPosition(int villageCenterX, int villageCenterZ)
     {
         double angle = Math.Atan2(villageCenterZ, villageCenterX);
         if (angle < 0) angle += 2 * Math.PI;
@@ -124,86 +136,138 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
         double slotAngle = slotIndex * (2 * Math.PI / CrossroadsStationSlots);
         int slotX = (int)(CrossroadsStationRadius * Math.Cos(slotAngle));
         int slotZ = (int)(CrossroadsStationRadius * Math.Sin(slotAngle));
-        return (slotX, slotZ);
+
+        // Orientation is radial: if the slot is primarily east/west of center, the platform
+        // runs east-west so rails point toward the village. Otherwise north-south.
+        var orientation = Math.Abs(Math.Cos(slotAngle)) > Math.Abs(Math.Sin(slotAngle))
+            ? StationOrientation.EastWest
+            : StationOrientation.NorthSouth;
+
+        return (slotX, slotZ, orientation);
     }
 
     /// <summary>
     /// Builds a covered station platform with stone brick base, oak shelter roof,
     /// destination/arrival signs, minecart dispenser, and welcoming amenities.
-    /// Platform runs north-south (along Z), 9 blocks long, 5 blocks wide.
-    /// Track enters from south (higher Z) and exits to north (lower Z).
+    /// Orientation determines whether the platform runs along Z (NorthSouth) or X (EastWest).
     /// </summary>
-    private async Task GenerateStationPlatformAsync(int cx, int cz, string destinationName, string localVillageName, CancellationToken ct)
+    private async Task GenerateStationPlatformAsync(int cx, int cz, string destinationName, string localVillageName,
+        StationOrientation orientation, CancellationToken ct)
     {
-        logger.LogInformation("Generating station platform at ({X},{Z}) for destination '{Dest}'",
-            cx, cz, destinationName);
+        logger.LogInformation("Generating station platform at ({X},{Z}) orientation={Orientation} for destination '{Dest}'",
+            cx, cz, orientation, destinationName);
 
-        int halfLen = PlatformLength / 2; // 4 (along Z axis now)
-        int halfWidth = PlatformWidth / 2; // 2 (along X axis now)
+        int halfLen = PlatformLength / 2; // 4
+        int halfWidth = PlatformWidth / 2; // 2
 
-        // 1. Foundation: Stone brick platform base (rotated: length along Z, width along X)
+        // For EastWest orientation, swap: length runs along X, width along Z
+        bool ew = orientation == StationOrientation.EastWest;
+        int halfLenX = ew ? halfLen : halfWidth;
+        int halfLenZ = ew ? halfWidth : halfLen;
+
+        // 1. Foundation: Stone brick platform base
         await rcon.SendFillAsync(
-            cx - halfWidth, TrackbedY, cz - halfLen,
-            cx + halfWidth, TrackbedY, cz + halfLen,
+            cx - halfLenX, TrackbedY, cz - halfLenZ,
+            cx + halfLenX, TrackbedY, cz + halfLenZ,
             "minecraft:stone_bricks", ct);
 
         // 2. Clear air above platform (5 blocks high for shelter structure)
         await rcon.SendFillAsync(
-            cx - halfWidth, TrackY, cz - halfLen,
-            cx + halfWidth, TrackY + 4, cz + halfLen,
+            cx - halfLenX, TrackY, cz - halfLenZ,
+            cx + halfLenX, TrackY + 4, cz + halfLenZ,
             "minecraft:air", ct);
 
-        // 3. Rail track down the center of the platform running north-south (along Z)
-        // Use fill for the trackbed and powered rails along the entire platform center
-        await rcon.SendFillAsync(cx, TrackbedY, cz - halfLen, cx, TrackbedY, cz + halfLen,
-            "minecraft:stone_bricks", ct);
-        await rcon.SendFillAsync(cx, TrackY, cz - halfLen, cx, TrackY, cz + halfLen,
-            "minecraft:powered_rail[powered=true]", ct);
+        // 3. Rail track down the center of the platform
+        if (ew)
+        {
+            await rcon.SendFillAsync(cx - halfLen, TrackbedY, cz, cx + halfLen, TrackbedY, cz,
+                "minecraft:stone_bricks", ct);
+            await rcon.SendFillAsync(cx - halfLen, TrackY, cz, cx + halfLen, TrackY, cz,
+                "minecraft:powered_rail[powered=true,shape=east_west]", ct);
+        }
+        else
+        {
+            await rcon.SendFillAsync(cx, TrackbedY, cz - halfLen, cx, TrackbedY, cz + halfLen,
+                "minecraft:stone_bricks", ct);
+            await rcon.SendFillAsync(cx, TrackY, cz - halfLen, cx, TrackY, cz + halfLen,
+                "minecraft:powered_rail[powered=true]", ct);
+        }
 
-        // 4. Stone brick slab walkways on east and west sides of the track
-        await rcon.SendFillAsync(
-            cx - halfWidth, TrackY, cz - halfLen,
-            cx - 1, TrackY, cz + halfLen,
-            "minecraft:stone_brick_slab", ct);
-        await rcon.SendFillAsync(
-            cx + 1, TrackY, cz - halfLen,
-            cx + halfWidth, TrackY, cz + halfLen,
-            "minecraft:stone_brick_slab", ct);
+        // 4. Stone brick slab walkways on both sides of the track
+        if (ew)
+        {
+            await rcon.SendFillAsync(
+                cx - halfLen, TrackY, cz - halfWidth,
+                cx + halfLen, TrackY, cz - 1,
+                "minecraft:stone_brick_slab", ct);
+            await rcon.SendFillAsync(
+                cx - halfLen, TrackY, cz + 1,
+                cx + halfLen, TrackY, cz + halfWidth,
+                "minecraft:stone_brick_slab", ct);
+        }
+        else
+        {
+            await rcon.SendFillAsync(
+                cx - halfWidth, TrackY, cz - halfLen,
+                cx - 1, TrackY, cz + halfLen,
+                "minecraft:stone_brick_slab", ct);
+            await rcon.SendFillAsync(
+                cx + 1, TrackY, cz - halfLen,
+                cx + halfWidth, TrackY, cz + halfLen,
+                "minecraft:stone_brick_slab", ct);
+        }
 
         // 5. Shelter structure: oak fence posts at corners
-        await rcon.SendFillAsync(cx - halfWidth, TrackY, cz - halfLen,
-            cx - halfWidth, TrackY + 3, cz - halfLen, "minecraft:oak_fence", ct);
-        await rcon.SendFillAsync(cx + halfWidth, TrackY, cz - halfLen,
-            cx + halfWidth, TrackY + 3, cz - halfLen, "minecraft:oak_fence", ct);
-        await rcon.SendFillAsync(cx - halfWidth, TrackY, cz + halfLen,
-            cx - halfWidth, TrackY + 3, cz + halfLen, "minecraft:oak_fence", ct);
-        await rcon.SendFillAsync(cx + halfWidth, TrackY, cz + halfLen,
-            cx + halfWidth, TrackY + 3, cz + halfLen, "minecraft:oak_fence", ct);
+        await rcon.SendFillAsync(cx - halfLenX, TrackY, cz - halfLenZ,
+            cx - halfLenX, TrackY + 3, cz - halfLenZ, "minecraft:oak_fence", ct);
+        await rcon.SendFillAsync(cx + halfLenX, TrackY, cz - halfLenZ,
+            cx + halfLenX, TrackY + 3, cz - halfLenZ, "minecraft:oak_fence", ct);
+        await rcon.SendFillAsync(cx - halfLenX, TrackY, cz + halfLenZ,
+            cx - halfLenX, TrackY + 3, cz + halfLenZ, "minecraft:oak_fence", ct);
+        await rcon.SendFillAsync(cx + halfLenX, TrackY, cz + halfLenZ,
+            cx + halfLenX, TrackY + 3, cz + halfLenZ, "minecraft:oak_fence", ct);
 
         // 6. Shelter roof: oak slabs covering the platform
         await rcon.SendFillAsync(
-            cx - halfWidth, TrackY + 3, cz - halfLen,
-            cx + halfWidth, TrackY + 3, cz + halfLen,
+            cx - halfLenX, TrackY + 3, cz - halfLenZ,
+            cx + halfLenX, TrackY + 3, cz + halfLenZ,
             "minecraft:oak_slab[type=top]", ct);
 
-        // 7. Sign support blocks at north and south ends — batch as vertical fills
+        // 7–12. Signs, dispenser, and decorations (orientation-dependent)
+        if (ew)
+        {
+            await PlaceStationDetailsEastWestAsync(cx, cz, halfLen, halfWidth, destinationName, localVillageName, ct);
+        }
+        else
+        {
+            await PlaceStationDetailsNorthSouthAsync(cx, cz, halfLen, halfWidth, destinationName, localVillageName, ct);
+        }
+    }
+
+    /// <summary>
+    /// Places signs, dispenser, and decorations for a north-south oriented station.
+    /// Track enters from south (higher Z) and exits to north (lower Z).
+    /// </summary>
+    private async Task PlaceStationDetailsNorthSouthAsync(int cx, int cz, int halfLen, int halfWidth,
+        string destinationName, string localVillageName, CancellationToken ct)
+    {
+        var truncatedDest = destinationName.Length > 15 ? destinationName[..15] : destinationName;
+        var truncatedLocal = localVillageName.Length > 12 ? localVillageName[..12] : localVillageName;
+        var destText = $"\"{truncatedDest}\"";
+        var localText = $"\"{truncatedLocal}\"";
+        var arrowText = "\"\u2191\"";
+        var stationText = "\"\u00a7lStation\"";
+        var arrivedText = "\"\u00a72Welcome!\"";
+        var fromText = $"\"\u00a77From: {truncatedLocal}\"";
+        var emptyText = "\"\"";
+
+        // Sign support blocks at north and south ends
         await rcon.SendFillAsync(cx + halfWidth + 1, TrackY, cz - halfLen,
             cx + halfWidth + 1, TrackY + 2, cz - halfLen, "minecraft:stone_bricks", ct);
         await rcon.SendFillAsync(cx + halfWidth + 1, TrackY, cz + halfLen,
             cx + halfWidth + 1, TrackY + 2, cz + halfLen, "minecraft:stone_bricks", ct);
 
-        // 8. Destination signs with village names — plain quoted strings, NOT JSON objects
-        var truncatedDest = destinationName.Length > 15 ? destinationName[..15] : destinationName;
-        var truncatedLocal = localVillageName.Length > 12 ? localVillageName[..12] : localVillageName;
-        var destText = $"\"{truncatedDest}\"";
-        var localText = $"\"{truncatedLocal}\"";
-        var arrowText = "\"\u2191\""; // North arrow for north-south travel
-        var stationText = "\"\u00a7lStation\""; // Bold "Station"
-        var arrivedText = "\"\u00a72Welcome!\""; // Green "Welcome!"
-        var fromText = $"\"\u00a77From: {truncatedLocal}\""; // Gray "From:"
-        var emptyText = "\"\"";
-
-        // Departure sign at south end (facing west so passengers can read it from platform)
+        // Departure sign at south end (facing west)
         await rcon.SendSetBlockAsync(cx + halfWidth + 1, TrackY + 2, cz + halfLen,
             $"minecraft:oak_wall_sign[facing=west]{{front_text:{{messages:['{stationText}','{arrowText}','{destText}',{emptyText}]}}}}", ct);
 
@@ -211,37 +275,31 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
         await rcon.SendSetBlockAsync(cx + halfWidth + 1, TrackY + 2, cz - halfLen,
             $"minecraft:oak_wall_sign[facing=west]{{front_text:{{messages:['{arrivedText}','{localText}','{fromText}',{emptyText}]}}}}", ct);
 
-        // 9. Button-activated minecart dispenser with descriptive sign (on west side)
+        // Button-activated minecart dispenser (on west side)
         await rcon.SendSetBlockAsync(cx - halfWidth + 1, TrackbedY, cz + halfLen - 1,
             "minecraft:dispenser[facing=up]", ct);
         await rcon.SendSetBlockAsync(cx - halfWidth + 1, TrackY, cz + halfLen - 1,
             "minecraft:stone_button[face=floor,facing=east]", ct);
-
-        // Load 64 minecarts into the dispenser
         await rcon.SendCommandAsync(
             $"data merge block {cx - halfWidth + 1} {TrackbedY} {cz + halfLen - 1} " +
             "{Items:[{Slot:0b,id:\"minecraft:minecart\",count:64}]}", ct);
 
-        // Dispenser instruction sign (on west wall, facing east into platform)
         var getCartText = "\"Get Minecart\"";
         var pressText = "\"Press Button\"";
         await rcon.SendSetBlockAsync(cx - halfWidth, TrackY + 1, cz + halfLen - 1,
             $"minecraft:oak_wall_sign[facing=east]{{front_text:{{messages:[{emptyText},'{getCartText}','{pressText}',{emptyText}]}}}}", ct);
 
-        // 10-12. Batch remaining station decorations: lanterns, benches, flower pots
+        // Decorations: lanterns, benches, flower pots
         var stationDecor = new List<(int x, int y, int z, string block)>
         {
-            // Lanterns
             (cx - halfWidth + 1, TrackY + 2, cz - 2, "minecraft:lantern[hanging=true]"),
             (cx - halfWidth + 1, TrackY + 2, cz + 2, "minecraft:lantern[hanging=true]"),
             (cx + halfWidth - 1, TrackY + 2, cz - 2, "minecraft:lantern[hanging=true]"),
             (cx + halfWidth - 1, TrackY + 2, cz + 2, "minecraft:lantern[hanging=true]"),
-            // Benches
             (cx - halfWidth + 1, TrackY, cz - 2, "minecraft:oak_stairs[facing=east]"),
             (cx - halfWidth + 1, TrackY, cz + 2, "minecraft:oak_stairs[facing=east]"),
             (cx + halfWidth - 1, TrackY, cz - 2, "minecraft:oak_stairs[facing=west]"),
             (cx + halfWidth - 1, TrackY, cz + 2, "minecraft:oak_stairs[facing=west]"),
-            // Flower pots
             (cx - halfWidth + 1, TrackY, cz - halfLen + 1, "minecraft:potted_red_tulip"),
             (cx + halfWidth - 1, TrackY, cz - halfLen + 1, "minecraft:potted_blue_orchid")
         };
@@ -249,37 +307,163 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
     }
 
     /// <summary>
-    /// Lays track between two station platforms using an L-shaped path.
-    /// Rails don't support diagonal placement. We use X-first then Z approach:
-    /// the track exits the village station heading east/west (X direction) to avoid
-    /// crossing through the village plaza, then turns toward the destination along Z.
-    /// The corner at (dstX, srcZ) is far from both stations.
+    /// Places signs, dispenser, and decorations for an east-west oriented station.
+    /// Track runs along X axis. Signs face north/south so passengers on the walkway can read them.
     /// </summary>
-    private async Task GenerateTrackPathAsync(int srcX, int srcZ, int dstX, int dstZ, CancellationToken ct)
+    private async Task PlaceStationDetailsEastWestAsync(int cx, int cz, int halfLen, int halfWidth,
+        string destinationName, string localVillageName, CancellationToken ct)
+    {
+        var truncatedDest = destinationName.Length > 15 ? destinationName[..15] : destinationName;
+        var truncatedLocal = localVillageName.Length > 12 ? localVillageName[..12] : localVillageName;
+        var destText = $"\"{truncatedDest}\"";
+        var localText = $"\"{truncatedLocal}\"";
+        var arrowText = "\"\u2192\""; // Right arrow for east-west travel
+        var stationText = "\"\u00a7lStation\"";
+        var arrivedText = "\"\u00a72Welcome!\"";
+        var fromText = $"\"\u00a77From: {truncatedLocal}\"";
+        var emptyText = "\"\"";
+
+        // Sign support blocks at east and west ends (on the south side of platform)
+        await rcon.SendFillAsync(cx - halfLen, TrackY, cz + halfWidth + 1,
+            cx - halfLen, TrackY + 2, cz + halfWidth + 1, "minecraft:stone_bricks", ct);
+        await rcon.SendFillAsync(cx + halfLen, TrackY, cz + halfWidth + 1,
+            cx + halfLen, TrackY + 2, cz + halfWidth + 1, "minecraft:stone_bricks", ct);
+
+        // Departure sign at one end (facing north into platform)
+        await rcon.SendSetBlockAsync(cx + halfLen, TrackY + 2, cz + halfWidth + 1,
+            $"minecraft:oak_wall_sign[facing=north]{{front_text:{{messages:['{stationText}','{arrowText}','{destText}',{emptyText}]}}}}", ct);
+
+        // Arrival sign at other end (facing north)
+        await rcon.SendSetBlockAsync(cx - halfLen, TrackY + 2, cz + halfWidth + 1,
+            $"minecraft:oak_wall_sign[facing=north]{{front_text:{{messages:['{arrivedText}','{localText}','{fromText}',{emptyText}]}}}}", ct);
+
+        // Button-activated minecart dispenser (on north side, near east end)
+        await rcon.SendSetBlockAsync(cx + halfLen - 1, TrackbedY, cz - halfWidth + 1,
+            "minecraft:dispenser[facing=up]", ct);
+        await rcon.SendSetBlockAsync(cx + halfLen - 1, TrackY, cz - halfWidth + 1,
+            "minecraft:stone_button[face=floor,facing=south]", ct);
+        await rcon.SendCommandAsync(
+            $"data merge block {cx + halfLen - 1} {TrackbedY} {cz - halfWidth + 1} " +
+            "{Items:[{Slot:0b,id:\"minecraft:minecart\",count:64}]}", ct);
+
+        var getCartText = "\"Get Minecart\"";
+        var pressText = "\"Press Button\"";
+        await rcon.SendSetBlockAsync(cx + halfLen - 1, TrackY + 1, cz - halfWidth,
+            $"minecraft:oak_wall_sign[facing=south]{{front_text:{{messages:[{emptyText},'{getCartText}','{pressText}',{emptyText}]}}}}", ct);
+
+        // Decorations: lanterns, benches, flower pots (rotated for E-W orientation)
+        var stationDecor = new List<(int x, int y, int z, string block)>
+        {
+            (cx - 2, TrackY + 2, cz - halfWidth + 1, "minecraft:lantern[hanging=true]"),
+            (cx + 2, TrackY + 2, cz - halfWidth + 1, "minecraft:lantern[hanging=true]"),
+            (cx - 2, TrackY + 2, cz + halfWidth - 1, "minecraft:lantern[hanging=true]"),
+            (cx + 2, TrackY + 2, cz + halfWidth - 1, "minecraft:lantern[hanging=true]"),
+            (cx - 2, TrackY, cz - halfWidth + 1, "minecraft:oak_stairs[facing=south]"),
+            (cx + 2, TrackY, cz - halfWidth + 1, "minecraft:oak_stairs[facing=south]"),
+            (cx - 2, TrackY, cz + halfWidth - 1, "minecraft:oak_stairs[facing=north]"),
+            (cx + 2, TrackY, cz + halfWidth - 1, "minecraft:oak_stairs[facing=north]"),
+            (cx - halfLen + 1, TrackY, cz - halfWidth + 1, "minecraft:potted_red_tulip"),
+            (cx - halfLen + 1, TrackY, cz + halfWidth - 1, "minecraft:potted_blue_orchid")
+        };
+        await rcon.SendSetBlockBatchAsync(stationDecor, ct);
+    }
+
+    /// <summary>
+    /// Builds a cobblestone walkway from a Crossroads station back toward the plaza edge,
+    /// connecting the station at CrossroadsStationRadius (35) to the plaza perimeter (30).
+    /// </summary>
+    private async Task GenerateCrossroadsWalkwayAsync(int stationX, int stationZ, CancellationToken ct)
+    {
+        // Direction from station back toward plaza center (0,0)
+        int dirX = stationX == 0 ? 0 : (stationX > 0 ? -1 : 1);
+        int dirZ = stationZ == 0 ? 0 : (stationZ > 0 ? -1 : 1);
+
+        // Lay cobblestone path from station toward plaza edge
+        int stationRadius = WorldConstants.CrossroadsStationRadius;
+        int plazaRadius = WorldConstants.CrossroadsPlazaRadius;
+        int gap = stationRadius - plazaRadius; // 5 blocks
+
+        var pathBlocks = new List<(int x1, int y1, int z1, int x2, int y2, int z2, string block)>();
+        for (int d = 1; d <= gap; d++)
+        {
+            int px = stationX + dirX * d;
+            int pz = stationZ + dirZ * d;
+            // 3-wide walkway perpendicular to the approach direction
+            if (Math.Abs(dirX) >= Math.Abs(dirZ))
+            {
+                // Approaching along X, widen along Z
+                pathBlocks.Add((px, TrackbedY, pz - 1, px, TrackbedY, pz + 1, "minecraft:cobblestone"));
+            }
+            else
+            {
+                // Approaching along Z, widen along X
+                pathBlocks.Add((px - 1, TrackbedY, pz, px + 1, TrackbedY, pz, "minecraft:cobblestone"));
+            }
+        }
+
+        if (pathBlocks.Count > 0)
+            await rcon.SendFillBatchAsync(pathBlocks, ct);
+    }
+
+    /// <summary>
+    /// Lays track between two station platforms using an L-shaped path.
+    /// Rails don't support diagonal placement. The L-path direction is chosen so
+    /// the LAST segment before the destination matches the destination station's orientation:
+    /// - If dest is Crossroads with E-W station: Z-first then X (X approach connects to E-W station)
+    /// - If dest is Crossroads with N-S station: X-first then Z (Z approach connects to N-S station)
+    /// - If dest is a village (always N-S): X-first then Z (existing behavior)
+    /// </summary>
+    private async Task GenerateTrackPathAsync(int srcX, int srcZ, int dstX, int dstZ,
+        bool destIsCrossroads, StationOrientation dstOrientation, CancellationToken ct)
     {
         logger.LogInformation("Laying track path from ({SX},{SZ}) to ({DX},{DZ})",
             srcX, srcZ, dstX, dstZ);
 
-        // L-shaped path: X segment from source, then Z segment to destination
-        // Corner at (dstX, srcZ) — same X as dest, same Z as source
-        int cornerX = dstX;
-        int cornerZ = srcZ;
+        int cornerX, cornerZ;
 
-        // Segment 1: horizontal (along X axis) from source toward corner
-        // Goes from srcX to cornerX along Z = srcZ
-        await LayRailSegmentAsync(srcX, srcZ, cornerX, cornerZ, ct);
-
-        // Segment 2: vertical (along Z axis) from corner to destination
-        // Goes from srcZ to dstZ along X = dstX
-        // Start one block past cornerZ to avoid double-placing the corner rail
-        int startZ = cornerZ < dstZ ? cornerZ + 1 : cornerZ - 1;
-        if (srcZ != dstZ) // Only needed if there's vertical travel
+        // Choose L-path direction so final segment aligns with destination station
+        bool xFirst;
+        if (destIsCrossroads && dstOrientation == StationOrientation.EastWest)
         {
-            await LayRailSegmentAsync(dstX, startZ, dstX, dstZ, ct);
+            // E-W station: approach along X last, so go Z-first then X
+            xFirst = false;
+        }
+        else
+        {
+            // N-S station (village or Crossroads): approach along Z last, so go X-first then Z
+            xFirst = true;
+        }
+
+        if (xFirst)
+        {
+            // Corner at (dstX, srcZ)
+            cornerX = dstX;
+            cornerZ = srcZ;
+
+            await LayRailSegmentAsync(srcX, srcZ, cornerX, cornerZ, ct);
+
+            if (srcZ != dstZ)
+            {
+                int startZ = cornerZ < dstZ ? cornerZ + 1 : cornerZ - 1;
+                await LayRailSegmentAsync(dstX, startZ, dstX, dstZ, ct);
+            }
+        }
+        else
+        {
+            // Corner at (srcX, dstZ)
+            cornerX = srcX;
+            cornerZ = dstZ;
+
+            await LayRailSegmentAsync(srcX, srcZ, srcX, cornerZ, ct);
+
+            if (srcX != dstX)
+            {
+                int startX = cornerX < dstX ? cornerX + 1 : cornerX - 1;
+                await LayRailSegmentAsync(startX, dstZ, dstX, dstZ, ct);
+            }
         }
 
         // Place corner rail LAST so it detects neighbors and forms a curve
-        // Only needed if we actually have a corner (different X and Z)
         if (srcX != dstX && srcZ != dstZ)
         {
             await PlaceCornerRailAsync(cornerX, cornerZ, ct);
