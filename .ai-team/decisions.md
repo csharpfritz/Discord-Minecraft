@@ -95,11 +95,6 @@
 **What:** Singleton `RconService` wrapping CoreRCON with semaphore serialization, configurable rate limiting (50ms default), auto-reconnection. `VillageGenerator` registered as `IVillageGenerator` singleton. Config via `Rcon:Host/Port/Password`.
 **Why:** Single RCON connection avoids pool exhaustion (Integration Risk #4). Rate limiting prevents overwhelming Paper MC. Singleton matches single-worker architecture.
 
-### 2026-02-11: Building generation structure and layout (S2-05)
-**By:** Batgirl
-**What:** 21×21 footprint, 4-floor buildings (y=65-84). Stone brick walls, oak plank floors, slab roof, 3-wide south entrance, NE switchback stairs, glass pane windows, glowstone lighting, colored carpet borders, oak wall signs (not standing signs). Ring placement at radius=60 using angle formula.
-**Why:** 19×19 interior holds 10+ players per floor. Ring layout with 16 slots provides even spacing. Wall signs are more visible and don't obstruct foot traffic.
-
 ### 2026-02-11: WorldGen job processor implementation (S2-06)
 **By:** Lucius
 **What:** `WorldGenJobProcessor` BackgroundService polls Redis `queue:worldgen` via `ListRightPopAsync` with 500ms idle delay. Retry: up to 3 attempts with exponential backoff (2, 4, 8s), then Failed. Payload mapping between Bridge.Data DTOs and WorldGen.Worker request models. `UpdateBuilding` stubbed for Sprint 3.
@@ -129,11 +124,6 @@
 **By:** Jeffrey T. Fritz (via Copilot)
 **What:** Only create village buildings for publicly accessible channels in the Discord server. Private channels, restricted channels, and channels not visible to @everyone should be excluded from the channel-to-village mapping.
 **Why:** User request — ensures the Minecraft world only reflects the public structure of the Discord server.
-
-### 2026-02-12: Minecart track spatial layout and station design
-**By:** Batgirl
-**What:** Track system uses L-shaped paths (X-first, then Z) at y=65 with stone brick trackbed at y=64. Stations placed 30 blocks south of village center (inside building ring at radius 60, outside plaza at radius 15). Platform slots are angle-deterministic using Atan2 — each destination gets a unique slot offset so platforms don't overlap. Powered rails every 8 blocks with redstone blocks underneath. Button-activated dispensers with 64 minecarts per platform.
-**Why:** L-shaped paths are the only option since Minecraft rails don't support diagonals. Station offset of 30 was chosen to be clearly outside the plaza perimeter wall (radius 15) but well inside the building ring (radius 60), keeping stations visually connected to the village without colliding with buildings. Angle-based slot assignment is deterministic and stable — adding new villages doesn't shift existing platforms. Redstone blocks under powered rails provide permanent activation without complex circuitry.
 
 ### 2026-02-12: User directive — Add BlueMap integration for interactive web map
 **By:** Jeffrey T. Fritz (via Copilot)
@@ -221,30 +211,10 @@ Changes applied across branches: `main`, `squad/10-bluemap`, `squad/1-paper-brid
 **What:** Added `MinecraftHealthCheck : IHealthCheck` in `src/AppHost/MinecraftHealthCheck.cs`. Connects to RCON at `localhost:25675`, sends `seed` command, returns Healthy on success or Unhealthy on failure/timeout (5s). Registered via `builder.Services.AddHealthChecks().AddCheck<MinecraftHealthCheck>("minecraft-rcon")` and wired to the minecraft container via `.WithHealthCheck("minecraft-rcon")`.
 **Why:** Without a health check, Aspire dashboard showed the Minecraft container as healthy immediately on container start, before the server was actually ready to accept RCON commands. Dependent services would fail connecting during startup.
 
-### 2026-02-12: Building layout — ring to grid with 27-block spacing
-**By:** Batgirl
-**What:** Changed from ring layout to a **4×4 grid layout** with proper spacing. GridSpacing: 27 blocks (footprint 21 + buffer 3×2). GridStartOffset: 50 blocks from village center. GridColumns: 4 (supports up to 16 buildings per village). Buildings placed in quadrants around the village center with at least 3 blocks of empty space on all sides.
-**Why:** Buildings were placed in a tight ring at radius 60 using angle-based positioning, causing them to touch or overlap like an apartment complex.
-
-### 2026-02-12: Entrance sign placement — outside doorway facing south
-**By:** Batgirl
-**What:** Moved exterior sign from `maxZ` (inside) to `maxZ + 1` (outside). Sign attaches to the outer wall and faces SOUTH. Position: `(bx, BaseY + 5, maxZ + 1)` — above the 4-tall doorway. Players approaching from outside can now see the channel name.
-**Why:** The entrance sign was placed inside the doorway facing the wrong direction.
-
 ### 2026-02-12: Village perimeter fence with gates
 **By:** Batgirl
 **What:** Added oak fence around the entire village at **radius 150 blocks**. Encompasses all buildings (max building edge at ~142 blocks from center). 3-wide oak fence gates at the 4 cardinal entrances. Corner fence posts with lanterns for nighttime visibility.
 **Why:** Village needed a defined perimeter and entry points for navigation.
-
-### 2026-02-12: Medieval castle building design
-**By:** Batgirl
-**What:** Redesigned BuildingGenerator for medieval castle style with proper block placement order. Cobblestone walls with stone brick trim, oak log corner turrets with slab caps, crenellated parapet, arrow slit windows, 3-wide arched entrance, proper 3-wide staircase, wall-mounted torch lighting, and signs placed last on solid walls. Reduced from 4 floors to 2 for better castle keep proportions. Updated BuildingArchiver to match new dimensions. Created comprehensive RCON building SKILL.md capturing all earned knowledge about RCON construction patterns.
-**Why:** Original buildings had floating blocks (glowstone in air after interior clear), unusable 1-block-wide stairs, signs floating without solid wall backing, and boring plain stone brick box aesthetics.
-
-### 2026-02-12: Station platform redesign with shelter and amenities
-**By:** Batgirl
-**What:** Redesigned station platforms as welcoming transit hubs: shelter structure (oak fence corner posts with oak slab roof), hanging lanterns, oak stair benches, potted flowers at shelter posts. Improved signage with bold headers and clear destination/origin text. Expanded to 9×5 blocks. Added coordinate-based hash offset at L-path corners for track collision mitigation.
-**Why:** Original station platforms were functional but bare — just slabs and signs. Players arriving had no sense of arrival or place.
 
 ### 2026-02-12: WorldConstants.cs corrections
 **By:** Batgirl
@@ -276,8 +246,27 @@ Changes applied across branches: `main`, `squad/10-bluemap`, `squad/1-paper-brid
 **What:** Central "Crossroads of the World" hub at world origin (0, 0) — ornate with decorative fountains, trees lining streets, and Minecraft decorative elements. All village train lines connect here via hub-and-spoke topology (replaces point-to-point). Grid cell (0,0) reserved for Crossroads; villages start at grid position (1,0). Grand plaza 61×61 blocks, 15×15 multi-tier fountain, 4 tree-lined avenues, lampposts, benches, flower beds, banners, welcome signs. 16 radial platform slots (atan2 angle-based). New `CrossroadsGenerator` + `CrossroadsInitializationService` (BackgroundService, generates at startup). World spawn set to (0, -59, 0) via `/setworldspawn`. Player teleport via in-game `/goto <channel-name>` (Paper plugin, fuzzy match). New Bridge API endpoints: `GET /api/buildings/search`, `GET /api/buildings/{id}/spawn`. Plugin endpoint `POST /api/teleport`. Tab completion, 5s cooldown recommended. `/goto` works without account linking.
 **Why:** User request (Jeff) — creates a natural central spawn point, simplifies navigation (hub-and-spoke, 2 rides max between any villages), scalable track topology (N tracks vs N×(N-1)/2). Beautiful spawn experience for new players. `/goto` reuses existing Bridge API infrastructure with minimal new endpoints.
 
-### 2026-02-13: User directive — Train stations near plaza
-**By:** Jeff (via Copilot)
-**What:** Train stations should be positioned near the village plaza, not far away. The plaza is "village central" so the station should feel connected to it.
-**Why:** User request — improves village cohesion and makes the spawn/teleport experience better when players arrive at a village.
+### 2026-02-13: Building design, layout, and aesthetics (consolidated)
+**By:** Batgirl
+**What:** BuildingGenerator creates medieval castle-style buildings on a 4x4 grid layout:
+- **Layout:** 4x4 grid with 27-block center spacing (21-block footprint + 6-block buffer). GridStartOffset 50 blocks from village center. Supports up to 16 buildings per village. Replaced original ring layout (radius 60) which caused overlap.
+- **Aesthetics:** Medieval castle keep -- cobblestone walls with stone brick trim, oak log corner turrets with slab caps, crenellated parapet, arrow slit windows, 3-wide arched entrance, 3-wide staircase, wall-mounted torch lighting. 2 floors (reduced from original 4 for better proportions). 21x21 footprint.
+- **Entrance sign:** Placed outside doorway at `(bx, BaseY+5, maxZ+1)` facing south -- visible to approaching players. Interior floating signs removed.
+- **Block placement order:** foundation -> walls -> turrets -> clear interior -> floors -> stairs -> roof -> windows -> entrance -> lighting -> signs (last, on solid walls).
+- **BuildingArchiver** updated to match 2-floor castle dimensions.
+**Why:** Original design had overlapping buildings (ring layout), floating blocks (glowstone in air after interior clear), unusable 1-block stairs, floating signs, and generic aesthetics. Grid layout provides proper spacing. Medieval castle style gives distinctive character. Entrance sign outside doorway is visible to approaching players.
 
+### 2026-02-13: Station platform design and placement (consolidated)
+**By:** Batgirl, Jeff (via Copilot)
+**What:** Station platforms are welcoming transit hubs positioned near the village plaza:
+- **Placement:** Near the village plaza per Jeff's directive -- the plaza is "village central" so stations should feel connected to it. Original 30-block-south offset being adjusted closer.
+- **Platform design:** 9x5 block platforms with shelter structure (oak fence corner posts with oak slab roof), hanging lanterns, oak stair benches, potted flowers. Improved signage with bold headers, destination AND origin village names, Minecraft color codes.
+- **Track layout:** L-shaped rail paths (Minecraft rails don't support diagonals) at y=65 with stone brick trackbed at y=64. Powered rails every 8 blocks with redstone blocks underneath for permanent activation.
+- **Platform slots:** Angle-deterministic using Atan2 -- each destination gets a unique slot so platforms don't overlap. Coordinate-based hash offset at L-path corners for track collision mitigation.
+- **Amenities:** Button-activated dispensers with 64 minecarts per platform.
+**Why:** User directive (Jeff) to position stations near plaza for village cohesion. Original bare slab platforms redesigned with shelter and amenities for a sense of arrival. L-shaped paths are the only option for Minecraft rails. Angle-based slot assignment is deterministic and stable.
+
+### 2026-02-13: Sprint 4 plan
+**By:** Gordon
+**What:** Sprint 4: World & Experience — 8 work items focusing on the Crossroads hub, hub-and-spoke track topology, player teleport, village amenity improvements, E2E test completion, BlueMap marker wiring, and building variety. Account linking deferred again.
+**Why:** Sprint 3 delivered the core pipeline (Discord→villages→tracks→commands). Sprint 4 shifts focus to making the world feel alive and navigable. The Crossroads hub (Jeff's request) is the centerpiece — it creates a beautiful spawn point, simplifies navigation with hub-and-spoke topology, and anchors the player experience. Carrying forward #7 and #10 ensures we don't accumulate test and integration debt. Building variety and village amenities make the world visually distinctive. Account linking remains deferred per Jeff's original request — the `/goto` command provides teleportation without it.
