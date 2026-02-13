@@ -252,6 +252,76 @@ var result = await rcon.SendCommandAsync("seed");
 - Floor height: 5 blocks (floor-to-ceiling)
 - Style: Castle keep, not office building
 
+## 8. Interior Furnishing Patterns
+
+Interior furnishing must be the **LAST step** in each style's generation chain. Place after signs.
+
+### Block Placement Order (Extended)
+
+```
+1-11. (existing structural order)
+12. Interior furnishing LAST — furniture, functional blocks, decorative items
+```
+
+### Interior Coordinate Reference
+
+```csharp
+int minX = bx - HalfFootprint + 2;  // 2-block inset from walls
+int maxX = bx + HalfFootprint - 2;
+int minZ = bz - HalfFootprint + 2;
+int maxZ = bz + HalfFootprint - 2;
+
+int groundFloorY = BaseY + 1;           // First block above foundation
+int secondFloorY = BaseY + FloorHeight + 1;  // First block above floor slab
+```
+
+### Furniture Block Palette
+
+| Purpose | Block |
+|---------|-------|
+| Table surface | `minecraft:oak_slab[type=bottom]` |
+| Chair | `minecraft:oak_stairs[facing=direction]` |
+| Fireplace | `minecraft:campfire[lit=true]` |
+| Kitchen | `minecraft:furnace`, `minecraft:smoker`, `minecraft:crafting_table` |
+| Study | `minecraft:bookshelf`, `minecraft:lectern`, `minecraft:chiseled_bookshelf` |
+| Brewing | `minecraft:brewing_stand`, `minecraft:water_cauldron[level=3]` |
+| Armory | `minecraft:anvil`, `minecraft:grindstone`, `minecraft:smithing_table` |
+| Throne | `minecraft:quartz_stairs[facing=south]` (seat), `minecraft:stone_brick_wall` (arms/back) |
+| Bed | `minecraft:red_bed[facing=direction,part=foot/head]` (2 blocks) |
+
+### Channel Topic Sign
+
+```csharp
+// Wall sign with italic "Topic" header, 2 lines of 15-char topic text
+// Placed on ground floor interior south wall
+await rcon.SendSetBlockAsync(x, y, z,
+    $"minecraft:oak_wall_sign[facing=north]{{front_text:{{messages:['\"§oTopic\"','\"{line1}\"','\"{line2}\"','\"\"']}}}}", ct);
+```
+
+## 9. Mob Summoning via RCON
+
+### Persistent Villagers
+
+```
+/summon minecraft:villager X Y Z {VillagerData:{profession:"minecraft:librarian",level:1,type:"minecraft:plains"},PersistenceRequired:1b}
+```
+
+**CRITICAL:** Always include `PersistenceRequired:1b` or mobs despawn when players leave the area.
+
+### Pets (Cats/Dogs)
+
+```
+/summon minecraft:cat X Y Z {CatType:1,Sitting:0b,PersistenceRequired:1b}
+/summon minecraft:wolf X Y Z {CollarColor:14,Sitting:0b,PersistenceRequired:1b}
+```
+
+### Crop Farm Pattern
+
+```
+farmland[moisture=7] base → water channel in middle → crops on top
+Crops use age property for mature state: wheat[age=7], carrots[age=7], potatoes[age=7], beetroots[age=3]
+```
+
 ## When to Use
 
 - Building any Minecraft structure via RCON

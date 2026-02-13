@@ -54,3 +54,18 @@
 📌 Learning (2026-02-14): Rail segment fill optimization — fill contiguous regular rail runs between powered rail intervals, then batch the powered rail + redstone block pairs. For a 500-block track: ~70 fills + 1 batch vs ~562 individual setblocks.
 
  Team update (2026-02-13): RconService batch API (SendBatchAsync, adaptive delay 50ms->10ms) now available for generator adoption  decided by Lucius
+
+📌 S5-01 complete (2026-02-14): Building interior furnishing — each architectural style now has fully furnished interiors placed AFTER GenerateFloorsAsync:
+- **Medieval Castle:** Ground floor = throne room (throne chair on polished andesite platform, red carpet runner, flanking banners, banquet table). 2nd floor = armory (anvil, grindstone, smithing table, weapon display chains, storage chests).
+- **Timber Cottage:** Ground floor = hearth + kitchen (campfire with chain, smoker, crafting table, furnace, barrel, dining table with chairs, cauldron). 2nd floor = study + bookshelves (bookshelf walls, writing desk, lectern, flower pot, beds).
+- **Stone Watchtower:** Ground floor = map/planning room (5×5 central planning table, cartography table, lectern, chairs, barrels, chiseled bookshelves). 2nd floor = brewing + supplies (brewing stands, water cauldron, supply chests, bookshelves, crafting table, soul campfire).
+- Channel topic from Discord displayed as wall sign on ground floor interior (when set). Topic data flows: Channel.Topic → DiscordChannelEvent.Topic → BuildingJobPayload.ChannelTopic → BuildingGenerationRequest.ChannelTopic → BuildingGenerator.
+📌 Learning (2026-02-14): Interior furnishing must happen AFTER all structural generation — placed last in the style method call chain (after signs). This prevents ClearInteriorAsync from wiping furniture and ensures all wall blocks exist for wall-mounted items.
+📌 Learning (2026-02-14): Channel topic pipeline requires changes across 5 layers (entity → event → payload → request → generator). Using optional parameters with defaults avoids breaking existing deserialization of jobs already in Redis queue.
+📌 S5-04 complete (2026-02-14): Village ambient life — AddAmbientDetailsAsync phase after fence generation:
+- 3 villager NPCs (librarian, farmer, armorer) with PersistenceRequired:1b to prevent despawning
+- 4 pets (2 cats, 2 dogs) near building rows
+- 4 crop farms (8×8 each) at village outskirts: wheat, carrots, potatoes, beetroot with water channels and fence borders
+- 4 flower gardens (3×3 mixed flowers) between plaza and building rows
+- Lanterns on fence posts every 6 blocks along perimeter walkway
+📌 Learning (2026-02-14): Minecraft mob summon commands need PersistenceRequired:1b NBT tag or villagers/animals will despawn when no players are nearby. Without it, villages become empty again after players leave.

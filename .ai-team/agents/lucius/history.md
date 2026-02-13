@@ -63,3 +63,14 @@
 
  Team update (2026-02-13): Oracle replaced ListRightPopAsync with PopClosestJobAsync in WorldGenJobProcessor for spawn-proximity priority + added tellraw broadcasts  decided by Oracle
  Team update (2026-02-13): Batgirl adopted SendBatchAsync/SendFillBatchAsync/SendSetBlockBatchAsync across all 4 generators, reducing commands from ~7,100 to ~2,600  decided by Batgirl
+
+### Sprint 5 — S5-07: World Activity Feed in Discord
+
+- **WorldActivityEvent** record added to Bridge.Data/Events/ — Type, Name, X, Z, Timestamp. JSON serialization via `JsonSerializerDefaults.Web`.
+- **RedisChannels.WorldActivity** = `"events:world:activity"` added alongside existing channel constants.
+- **WorldGenJobProcessor** publishes `WorldActivityEvent` to Redis pub/sub after successful job completion (best-effort, never fails the job). Event types: `village_built`, `building_built`, `track_built`, `building_archived`.
+- **WorldActivityFeedService** BackgroundService in DiscordBot.Service subscribes to the Redis channel, posts Discord embeds to a configurable channel (`Discord:ActivityChannelId` config key / `Discord__ActivityChannelId` env var).
+- Embed format: 🟢 green for built events, 🔴 red for archived. Title = formatted type + name. Description = coordinates + timestamp. Footer = "Discord-Minecraft World".
+- Rate limiting: ConcurrentQueue + 5-second delay between posts to avoid Discord API spam.
+- AppHost passes `discord-activity-channel-id` Aspire parameter as env var to the discord-bot project.
+- Key design choice: Activity feed lives in DiscordBot.Service (not Bridge.Api) because that's where the DiscordSocketClient singleton exists. Bridge.Api has no Discord.NET dependency.
