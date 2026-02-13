@@ -72,3 +72,9 @@
  Team update (2026-02-13): WorldGenJobProcessor now uses spawn-proximity priority (PopClosestJobAsync) instead of FIFO, plus tellraw broadcast messages during generation  decided by Oracle
 
  Team update (2026-02-13): Sprint 5 Wave 1 complete (S5-01, S5-02, S5-04, S5-05, S5-06, S5-07). Wave 2 unblocked (S5-03, S5-08). Villager NPCs removed per Jeff's directive  decided by team
+
+📌 Team update (2026-02-13): Dynamic building sizing (S5-08) — buildings scale with Discord channel member count. BuildingSize enum (Small/Medium/Large) in Bridge.Data, DeriveSize method in BuildingGenerator, BuildingDimensions record parameterizes footprint/floors/walls/roof. MemberCount flows from DiscordBot sync → Bridge.Api → Redis job → WorldGen.Worker. Existing buildings not resized — decided by Gordon
+- Interior furnishing methods (Batgirl's work) use relative coordinates from building edges (minX/maxX/minZ/maxZ), so they scale correctly with different footprint sizes.
+- Lighting/window placement uses scaled ranges (torchRange, windowSpacing) derived from HalfFootprint rather than hardcoded offsets.
+- Staircase generation now loops over floor transitions (dim.Floors - 1) instead of hardcoding a single staircase.
+- SocketTextChannel.Users.Count provides the member count in Discord.NET 3.18.0 (no MemberCount property).
