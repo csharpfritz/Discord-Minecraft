@@ -1,0 +1,4 @@
+### RconService batch command API and adaptive delay
+**By:** Lucius
+**What:** `RconService` now exposes `SendBatchAsync`, `SendFillBatchAsync`, and `SendSetBlockBatchAsync` methods. Batches acquire the semaphore once and apply a single delay at the end instead of per-command. Default `Rcon:CommandDelayMs` reduced from 50ms to 10ms. Adaptive delay ramps down on success (min 5ms) and doubles on failure (max 100ms). Existing single-command methods are unchanged — generators opt into batching incrementally.
+**Why:** With ~7,100 RCON commands per typical world, the per-command 50ms delay created a 6.5-minute bottleneck. Batch API reduces this to seconds for generators that adopt it. Adaptive delay adds resilience — backs off automatically if the server is struggling, recovers when it's healthy. The semaphore remains at (1,1) so there's no concurrency risk, just fewer unnecessary sleeps.

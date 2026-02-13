@@ -183,3 +183,14 @@
 📌 Team update (2026-02-13): Hub-and-Spoke track topology — each village gets one track to Crossroads, O(n) instead of O(n²), radial slot positioning at Crossroads — decided by Batgirl
 📌 Team update (2026-02-13): Village station relocation to plaza edge — VillageStationOffset=17, shared constant in WorldConstants — decided by Batgirl
 📌 Team update (2026-02-13): Crossroads API and BlueMap URL configuration — Bridge.Api has BlueMap:WebUrl config key, /api/crossroads endpoint, /crossroads slash command — decided by Oracle
+
+### Sprint 4 — Phase 1: RconService Batch Infrastructure
+
+- Added `SendBatchAsync(IReadOnlyList<string>, CancellationToken)` — acquires semaphore once for the entire batch, sends all commands sequentially via CoreRCON, applies ONE delay at the end instead of per-command. Returns `string[]` of responses.
+- Added `SendFillBatchAsync` and `SendSetBlockBatchAsync` — typed batch helpers that format fill/setblock commands and delegate to `SendBatchAsync`
+- Existing `SendCommandAsync`, `SendFillAsync`, `SendSetBlockAsync` remain unchanged — generators opt into batching incrementally
+- Default `Rcon:CommandDelayMs` reduced from 50ms to 10ms — with ~7,100 commands per world, this alone saves significant time
+- Adaptive delay: `_currentDelayMs` starts at configured delay, decreases by 1ms on success (min 5ms), doubles on failure (max 100ms). Applied to both single commands and batches.
+- Semaphore stays at (1,1) — batch optimization removes inter-command delays within a single semaphore hold, not parallelism
+- Batch error handling: on failure, logs batch size, doubles adaptive delay, resets RCON connection (same pattern as single-command error handling)
+- Performance projection: a 100-command batch now takes ~10ms total delay instead of 100×50ms = 5000ms
