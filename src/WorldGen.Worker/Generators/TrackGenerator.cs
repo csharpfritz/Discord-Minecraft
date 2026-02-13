@@ -14,7 +14,7 @@ public sealed class TrackGenerator(RconService rcon, ILogger<TrackGenerator> log
     private const int TrackY = -59; // elevated trackbed (superflat surface + 1)
     private const int TrackbedY = -60; // support block under tracks (superflat surface)
     private const int PoweredRailInterval = 8;
-    private const int StationOffset = 30; // station distance south of village center
+    private const int StationOffset = 20; // station just outside plaza (plaza radius 15 + 5 block walkway)
 
     // Station platform dimensions
     private const int PlatformLength = 9; // along track direction (expanded for shelter)

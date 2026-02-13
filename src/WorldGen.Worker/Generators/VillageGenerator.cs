@@ -207,7 +207,8 @@ public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator>
 
         // Signs on top of fountain basin edges, facing outward
         var truncatedName = villageName.Length > 15 ? villageName[..15] : villageName;
-        var signText = $"{{\"text\":\"{truncatedName}\"}}";
+        // Minecraft 1.20+ signs need plain text in double quotes, not JSON objects
+        var signText = $"\"{truncatedName}\"";
 
         // North-facing sign (on south side of basin)
         await rcon.SendSetBlockAsync(cx, BaseY + 2, cz + 1,
