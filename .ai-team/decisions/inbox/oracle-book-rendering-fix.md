@@ -1,0 +1,4 @@
+### 2026-02-14: Written book pages must use raw SNBT text components (not quoted JSON strings) for Minecraft 1.20.5+
+**By:** Oracle
+**What:** Fixed two book rendering bugs: (1) CrossroadsGenerator RCON book pages changed from single-quoted JSON strings (`'[{"text":"..."}]'`) to raw SNBT text component lists (`[{text:"...",bold:true}]`); (2) HttpApiServer plugin lectern handler changed from legacy `BookMeta.addPage(String)` to Adventure API `Component.text(page)` with `BookMeta.pages(List<Component>)`.
+**Why:** In Minecraft 1.20.5+, `written_book_content` pages are raw text components. Single-quoted JSON strings in SNBT are interpreted as plain-text string literals, causing the raw JSON markup to display verbatim in the book UI. The legacy Bukkit `addPage()` API also treats input as plain text rather than rich text components. Both fixes ensure book content renders with proper formatting (colors, bold, etc.) instead of showing raw JSON.

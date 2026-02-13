@@ -17,6 +17,8 @@ import org.bukkit.block.Lectern;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.BookMeta;
 
+import net.kyori.adventure.text.Component;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -316,9 +318,11 @@ public final class HttpApiServer {
                     BookMeta meta = (BookMeta) book.getItemMeta();
                     meta.setTitle(title.length() > 32 ? title.substring(0, 32) : title);
                     meta.setAuthor(author.length() > 16 ? author.substring(0, 16) : author);
+                    List<Component> bookPages = new ArrayList<>();
                     for (String page : pages) {
-                        meta.addPage(page);
+                        bookPages.add(Component.text(page));
                     }
+                    meta.pages(bookPages);
                     book.setItemMeta(meta);
                     lectern.getInventory().setItem(0, book);
                     lectern.update();

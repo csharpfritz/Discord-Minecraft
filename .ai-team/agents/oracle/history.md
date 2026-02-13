@@ -59,3 +59,10 @@
 
  Team update (2026-02-13): Discord Pins  Building Library (S5-03)  POST /api/buildings/{id}/pin endpoint available. Oracle/DiscordBot should call this when a Discord message is pinned  decided by Lucius
  Team update (2026-02-13): Dynamic building sizing (S5-08)  DiscordBotWorker must pass channel.Users.Count through sync payload for member-based building sizing  decided by Gordon
+
+### Minecraft 1.21.4 Written Book Formats
+
+- **Lectern RCON (`data merge block`):** In Minecraft 1.20.5+, `written_book_content` pages are **raw SNBT text components**, not single-quoted JSON strings. Use `[{text:"Hello",bold:true}]` not `'[{"text":"Hello","bold":true}]'`. The single-quoted form is treated as a plain-text string literal, causing raw JSON to display on screen.
+- **Paper Plugin (Bukkit API):** `BookMeta.addPage(String)` is legacy and treats input as plain text. For Paper 1.21.4, use Adventure API: `Component.text(page)` with `BookMeta.pages(List<Component>)` to properly render book pages.
+- **Key file paths:** CrossroadsGenerator.cs (`GenerateInfoKioskAsync`) for RCON book placement; HttpApiServer.java (`handleLectern`) for plugin-based lectern creation.
+- **SNBT text component format:** `{text:"content",bold:true,color:"gold"}` — unquoted keys, unquoted boolean values, quoted string values.
