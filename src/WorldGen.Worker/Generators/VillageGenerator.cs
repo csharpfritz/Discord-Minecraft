@@ -51,6 +51,7 @@ public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator>
         await GenerateWelcomePathsAsync(cx, cz, ct);
         await GenerateStationAreaAsync(cx, cz, ct);
         await GenerateVillageFenceAsync(cx, cz, ct);
+        await AddAmbientDetailsAsync(cx, cz, ct);
 
         // Release forceloaded chunks
         await rcon.SendCommandAsync($"forceload remove {minChunkX << 4} {minChunkZ << 4} {maxChunkX << 4} {maxChunkZ << 4}", ct);
@@ -346,5 +347,170 @@ public sealed class VillageGenerator(RconService rcon, ILogger<VillageGenerator>
             (maxX, BaseY + 2, maxZ, "minecraft:lantern[hanging=false]")
         };
         await rcon.SendSetBlockBatchAsync(cornerBlocks, ct);
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  Ambient Life (villagers, animals, farms, gardens, lighting)
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Adds ambient details to make villages feel alive:
+    /// villager NPCs, cats/dogs near buildings, crop farms on outskirts,
+    /// flower gardens between buildings, lanterns on fence posts along walkways.
+    /// </summary>
+    private async Task AddAmbientDetailsAsync(int cx, int cz, CancellationToken ct)
+    {
+        logger.LogInformation("Adding ambient village details (NPCs, animals, farms, gardens, lighting)");
+
+        await SummonVillagersAsync(cx, cz, ct);
+        await SummonPetsAsync(cx, cz, ct);
+        await GenerateCropFarmsAsync(cx, cz, ct);
+        await GenerateFlowerGardensAsync(cx, cz, ct);
+        await GenerateWalkwayLanternsAsync(cx, cz, ct);
+    }
+
+    /// <summary>
+    /// Summon 2-3 villagers with different professions near the plaza.
+    /// </summary>
+    private async Task SummonVillagersAsync(int cx, int cz, CancellationToken ct)
+    {
+        var commands = new List<string>
+        {
+            $"summon minecraft:villager {cx + 3} {BaseY + 1} {cz + 3} {{VillagerData:{{profession:\"minecraft:librarian\",level:1,type:\"minecraft:plains\"}},PersistenceRequired:1b}}",
+            $"summon minecraft:villager {cx - 4} {BaseY + 1} {cz - 2} {{VillagerData:{{profession:\"minecraft:farmer\",level:1,type:\"minecraft:plains\"}},PersistenceRequired:1b}}",
+            $"summon minecraft:villager {cx + 1} {BaseY + 1} {cz - 5} {{VillagerData:{{profession:\"minecraft:armorer\",level:1,type:\"minecraft:plains\"}},PersistenceRequired:1b}}"
+        };
+        await rcon.SendBatchAsync(commands, ct);
+    }
+
+    /// <summary>
+    /// Summon tamed cats and dogs near building areas for ambient life.
+    /// </summary>
+    private async Task SummonPetsAsync(int cx, int cz, CancellationToken ct)
+    {
+        // Place pets near the building rows (±RowOffset from center)
+        var commands = new List<string>
+        {
+            $"summon minecraft:cat {cx + 8} {BaseY + 1} {cz - 18} {{CatType:1,Sitting:0b,PersistenceRequired:1b}}",
+            $"summon minecraft:cat {cx - 6} {BaseY + 1} {cz + 22} {{CatType:5,Sitting:1b,PersistenceRequired:1b}}",
+            $"summon minecraft:wolf {cx + 12} {BaseY + 1} {cz - 20} {{CollarColor:14,Sitting:0b,PersistenceRequired:1b}}",
+            $"summon minecraft:wolf {cx - 10} {BaseY + 1} {cz + 18} {{CollarColor:11,Sitting:1b,PersistenceRequired:1b}}"
+        };
+        await rcon.SendBatchAsync(commands, ct);
+    }
+
+    /// <summary>
+    /// 8×8 crop farm plots on village outskirts (outside building rows, inside fence).
+    /// Four plots: NE wheat, NW carrots, SE potatoes, SW beetroot.
+    /// </summary>
+    private async Task GenerateCropFarmsAsync(int cx, int cz, CancellationToken ct)
+    {
+        int farmOffset = 50; // Inside fence (75), outside building area
+
+        var farms = new (int fx, int fz, string crop)[]
+        {
+            (cx + farmOffset, cz - farmOffset, "minecraft:wheat[age=7]"),
+            (cx - farmOffset, cz - farmOffset, "minecraft:carrots[age=7]"),
+            (cx + farmOffset, cz + farmOffset, "minecraft:potatoes[age=7]"),
+            (cx - farmOffset, cz + farmOffset, "minecraft:beetroots[age=3]")
+        };
+
+        foreach (var (fx, fz, crop) in farms)
+        {
+            // Farmland base (8×8)
+            await rcon.SendFillAsync(fx, BaseY, fz, fx + 7, BaseY, fz + 7, "minecraft:farmland[moisture=7]", ct);
+
+            // Water channel in the middle (row 4)
+            await rcon.SendFillAsync(fx, BaseY, fz + 3, fx + 7, BaseY, fz + 3, "minecraft:water", ct);
+
+            // Crops on farmland rows (skip water row)
+            await rcon.SendFillAsync(fx, BaseY + 1, fz, fx + 7, BaseY + 1, fz + 2, crop, ct);
+            await rcon.SendFillAsync(fx, BaseY + 1, fz + 4, fx + 7, BaseY + 1, fz + 7, crop, ct);
+
+            // Oak fence border
+            await rcon.SendFillAsync(fx - 1, BaseY + 1, fz - 1, fx + 8, BaseY + 1, fz - 1, "minecraft:oak_fence", ct);
+            await rcon.SendFillAsync(fx - 1, BaseY + 1, fz + 8, fx + 8, BaseY + 1, fz + 8, "minecraft:oak_fence", ct);
+            await rcon.SendFillAsync(fx - 1, BaseY + 1, fz - 1, fx - 1, BaseY + 1, fz + 8, "minecraft:oak_fence", ct);
+            await rcon.SendFillAsync(fx + 8, BaseY + 1, fz - 1, fx + 8, BaseY + 1, fz + 8, "minecraft:oak_fence", ct);
+        }
+    }
+
+    /// <summary>
+    /// Flower gardens placed between building rows and the plaza.
+    /// Mixed flowers in small 3×3 clusters.
+    /// </summary>
+    private async Task GenerateFlowerGardensAsync(int cx, int cz, CancellationToken ct)
+    {
+        // Garden patches at midpoints between plaza and building rows
+        var gardens = new (int gx, int gz)[]
+        {
+            (cx - 20, cz - 8),  // west of north approach
+            (cx + 20, cz - 8),  // east of north approach
+            (cx - 20, cz + 8),  // west of south approach
+            (cx + 20, cz + 8),  // east of south approach
+        };
+
+        string[] flowers =
+        [
+            "minecraft:poppy", "minecraft:dandelion", "minecraft:blue_orchid",
+            "minecraft:allium", "minecraft:azure_bluet", "minecraft:red_tulip",
+            "minecraft:orange_tulip", "minecraft:oxeye_daisy", "minecraft:cornflower"
+        ];
+
+        var blocks = new List<(int x, int y, int z, string block)>();
+        int flowerIdx = 0;
+        foreach (var (gx, gz) in gardens)
+        {
+            // Grass base for garden
+            await rcon.SendFillAsync(gx - 1, BaseY, gz - 1, gx + 1, BaseY, gz + 1, "minecraft:grass_block", ct);
+
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                for (int dz = -1; dz <= 1; dz++)
+                {
+                    blocks.Add((gx + dx, BaseY + 1, gz + dz, flowers[flowerIdx % flowers.Length]));
+                    flowerIdx++;
+                }
+            }
+        }
+        await rcon.SendSetBlockBatchAsync(blocks, ct);
+    }
+
+    /// <summary>
+    /// Lanterns on fence posts along the perimeter walkway for ambient lighting.
+    /// Placed every 6 blocks along the walkway perimeter.
+    /// </summary>
+    private async Task GenerateWalkwayLanternsAsync(int cx, int cz, CancellationToken ct)
+    {
+        int perimeterRadius = FenceRadius - 5;
+        int spacing = 6;
+
+        var lanternBlocks = new List<(int x, int y, int z, string block)>();
+
+        // North and south edges
+        for (int x = cx - perimeterRadius; x <= cx + perimeterRadius; x += spacing)
+        {
+            // North edge — fence post + lantern
+            lanternBlocks.Add((x, BaseY + 1, cz - perimeterRadius - 1, "minecraft:oak_fence"));
+            lanternBlocks.Add((x, BaseY + 2, cz - perimeterRadius - 1, "minecraft:lantern[hanging=false]"));
+
+            // South edge
+            lanternBlocks.Add((x, BaseY + 1, cz + perimeterRadius + 1, "minecraft:oak_fence"));
+            lanternBlocks.Add((x, BaseY + 2, cz + perimeterRadius + 1, "minecraft:lantern[hanging=false]"));
+        }
+
+        // East and west edges
+        for (int z = cz - perimeterRadius; z <= cz + perimeterRadius; z += spacing)
+        {
+            // West edge
+            lanternBlocks.Add((cx - perimeterRadius - 1, BaseY + 1, z, "minecraft:oak_fence"));
+            lanternBlocks.Add((cx - perimeterRadius - 1, BaseY + 2, z, "minecraft:lantern[hanging=false]"));
+
+            // East edge
+            lanternBlocks.Add((cx + perimeterRadius + 1, BaseY + 1, z, "minecraft:oak_fence"));
+            lanternBlocks.Add((cx + perimeterRadius + 1, BaseY + 2, z, "minecraft:lantern[hanging=false]"));
+        }
+
+        await rcon.SendSetBlockBatchAsync(lanternBlocks, ct);
     }
 }
