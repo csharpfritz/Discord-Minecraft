@@ -82,3 +82,10 @@
 📌 Team update (2026-02-13): Crossroads API and BlueMap URL configuration — Bridge.Api has BlueMap:WebUrl config key, /api/crossroads endpoint, /crossroads slash command — decided by Oracle
 
  Team update (2026-02-13): RconService batch API + fill consolidation across all generators completed  test coverage needed for SendBatchAsync, SendFillBatchAsync, SendSetBlockBatchAsync, and adaptive delay behavior  decided by Gordon
+- E2E test scenarios (S5-05, #27) added in `tests/Acceptance.Tests/EndToEndScenarioTests.cs` — 5 tests covering full guild sync, channel create/delete events, track job topology verification, and status endpoint count accuracy
+- E2E tests exercise the .NET service layer (Bridge.Api, Redis event consumer, WorldGen job queue) without depending on Minecraft RCON commands — uses API endpoints and Redis events as test drivers
+- Building style (MedievalCastle/TimberCottage/StoneWatchtower via ChannelId % 3) is a WorldGen-layer concept not persisted in the DB — E2E tests verify building index assignment and associations instead
+- `/api/status` endpoint returns `villageCount` and `buildingCount` (excludes archived) but does NOT include `playerCount` — status test validates count arithmetic including archival
+- E2E tests use `[Trait("Subcategory", "E2E")]` for filtering alongside existing Smoke/Tracks/Archival subcategories
+- Event processing delay (5 seconds) sufficient for DiscordEventConsumer pub/sub → DB writes; no WorldGen/RCON dependency in E2E tests
+- Track job verification is timing-sensitive — WorldGenJobProcessor enqueues CreateTrack after CreateVillage completes, but the job may be processed before we can observe it in the queue. Test validates Crossroads hub topology via API as fallback
